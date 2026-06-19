@@ -56,12 +56,11 @@ def cli(argv=None):
     parser.add_argument("--run-dir", dest="run_dir", default=None)
     args = parser.parse_args(argv)
 
-    model, meta, base = registry.load_run(args.run_dir)
+    loaded = registry.load_run(args.run_dir)
     df = load_data(args.in_path)
     validate_schema(df, require_target=False)
 
-    cut = meta["tier_cutpoints"]
-    scored = score_frame(df, model, cut["t_star"], cut["t_mid"], base_linear=base)
+    scored = loaded.score(df)
     scored.to_csv(args.out_path, index=False)
     print(f"Scored {len(scored):,} customers -> {args.out_path}")
     print(scored["risk_tier"].value_counts().rename("count").to_string())

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -87,9 +88,39 @@ def latest_run_dir(base_dir=config.MODELS_DIR) -> Path:
     return max(runs, key=lambda d: d.stat().st_mtime)
 
 
-def load_run(run_dir=None):
+@dataclass(frozen=True)
+class LoadedModel:
+    """A loaded run that owns its own cutpoints + base linear and can score a frame.
+
+    Callers used to receive a raw (model, meta, base) tuple and each re-reach into
+    meta["tier_cutpoints"] before scoring; that key path now lives here alone.
+    """
+
+    model: object
+    metadata: dict
+    base_linear: object | None
+
+    @property
+    def run_id(self) -> str | None:
+        return self.metadata.get("run_id")
+
+    @property
+    def cutpoints(self) -> dict:
+        return self.metadata["tier_cutpoints"]
+
+    def score(self, df, k: int = 3):
+        # Local import: registry is the lower layer; scoring imports registry.
+        from .scoring import score_frame
+
+        cut = self.cutpoints
+        return score_frame(
+            df, self.model, cut["t_star"], cut["t_mid"], base_linear=self.base_linear, k=k
+        )
+
+
+def load_run(run_dir=None) -> LoadedModel:
     run_dir = Path(run_dir) if run_dir is not None else latest_run_dir()
     model = joblib.load(run_dir / PIPELINE_FILE)
     metadata = json.loads((run_dir / METADATA_FILE).read_text())
     base = joblib.load(run_dir / BASE_FILE) if (run_dir / BASE_FILE).exists() else None
-    return model, metadata, base
+    return LoadedModel(model, metadata, base)

@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 
 from churn import config, registry
 from churn.data import validate_schema
-from churn.scoring import score_frame
 
 
 class CustomerPayload(BaseModel):
@@ -49,9 +48,7 @@ def state_key(run_dir: str | None) -> str:
 @lru_cache(maxsize=8)
 def load_state(run_dir_key: str):
     run_dir = None if run_dir_key == "__latest__" else run_dir_key
-    model, meta, base = registry.load_run(run_dir)
-    cutpoints = meta["tier_cutpoints"]
-    return model, meta, base, cutpoints
+    return registry.load_run(run_dir)
 
 
 def create_app(run_dir: str | None = None) -> FastAPI:
@@ -65,15 +62,15 @@ def create_app(run_dir: str | None = None) -> FastAPI:
     @app.get("/health")
     def health():
         try:
-            meta = load_state(key)[1]
+            loaded = load_state(key)
         except FileNotFoundError:
             return {"status": "degraded", "model_loaded": False}
-        return {"status": "ok", "model_loaded": True, "run_id": meta.get("run_id")}
+        return {"status": "ok", "model_loaded": True, "run_id": loaded.run_id}
 
     @app.post("/score", response_model=ScoreResponse)
     def score(payload: CustomerPayload):
         try:
-            model, meta, base, cutpoints = load_state(key)
+            loaded = load_state(key)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -83,19 +80,13 @@ def create_app(run_dir: str | None = None) -> FastAPI:
         df = pd.DataFrame([row])[[config.ID_COL, *config.RAW_FEATURE_COLUMNS]]
         validate_schema(df, require_target=False)
 
-        scored = score_frame(
-            df,
-            model,
-            cutpoints["t_star"],
-            cutpoints["t_mid"],
-            base_linear=base,
-        ).iloc[0]
+        scored = loaded.score(df).iloc[0]
         return {
             "customer_id": scored[config.ID_COL],
             "churn_probability": float(scored["churn_probability"]),
             "risk_tier": scored["risk_tier"],
             "top_reason_codes": scored.get("top_reason_codes"),
-            "model_run_id": meta["run_id"],
+            "model_run_id": loaded.run_id,
         }
 
     return app

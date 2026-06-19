@@ -180,8 +180,9 @@ def write_drift_report(
     model = None
     run_id = None
     try:
-        model, meta = registry.load_run(run_dir)[:2]
-        run_id = meta.get("run_id")
+        loaded = registry.load_run(run_dir)
+        model = loaded.model
+        run_id = loaded.run_id
     except FileNotFoundError:
         pass
 
