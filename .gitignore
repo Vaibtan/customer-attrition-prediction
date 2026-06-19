@@ -8,5 +8,6 @@ __pycache__/
 htmlcov/
 .venv/
 models/*/
+scored.csv
 .DS_Store
 Thumbs.db
