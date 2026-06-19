@@ -9,7 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from churn import config, registry
 from churn.data import split_features_target
 from churn.pipeline import build_pipeline
-from churn.scoring import cli, score_frame, score_to_tier
+from churn.scoring import ScoredCustomer, cli, score_frame, score_to_tier
 
 
 def test_score_to_tier_is_a_pure_function_of_cutpoints():
@@ -35,6 +35,22 @@ def test_tier_invariant_to_batch_composition(sample):
         single = score_frame(sample.iloc[[i]], model, t_star, t_mid)
         assert single["risk_tier"].iloc[0] == batch["risk_tier"].iloc[i]
         assert np.isclose(single["churn_probability"].iloc[0], batch["churn_probability"].iloc[i])
+
+
+def test_scored_customer_from_frame_maps_columns(sample):
+    X, y, ids = split_features_target(sample)
+    model = build_pipeline(LogisticRegression(max_iter=500)).fit(X, y)
+
+    plain = score_frame(sample, model, 0.5, 0.3)
+    records = ScoredCustomer.from_frame(plain)
+    assert len(records) == len(plain)
+    assert records[0].customer_id == plain[config.ID_COL].iloc[0]
+    assert records[0].risk_tier == plain["risk_tier"].iloc[0]
+    assert records[0].top_reason_codes is None
+
+    with_reasons = score_frame(sample.head(4), model, 0.5, 0.3, base_linear=model)
+    rec = ScoredCustomer.from_frame(with_reasons)[0]
+    assert rec.top_reason_codes == with_reasons["top_reason_codes"].iloc[0]
 
 
 def test_probabilities_in_unit_interval(sample):

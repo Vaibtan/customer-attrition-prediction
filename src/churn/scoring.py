@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -47,6 +48,33 @@ def score_frame(
     if base_linear is not None:
         out["top_reason_codes"] = reason_codes_for_frame(base_linear, X, k=k)
     return out
+
+
+@dataclass(frozen=True)
+class ScoredCustomer:
+    """One scored customer as a typed record; the single map from score_frame's columns.
+
+    Consumers (the API envelope) read named attributes, so a column rename in
+    score_frame fails here at one seam instead of silently in the response mapping.
+    """
+
+    customer_id: object
+    churn_probability: float
+    risk_tier: str
+    top_reason_codes: str | None = None
+
+    @classmethod
+    def from_frame(cls, scored: pd.DataFrame) -> list[ScoredCustomer]:
+        has_reasons = "top_reason_codes" in scored.columns
+        return [
+            cls(
+                customer_id=row[config.ID_COL],
+                churn_probability=float(row["churn_probability"]),
+                risk_tier=str(row["risk_tier"]),
+                top_reason_codes=row["top_reason_codes"] if has_reasons else None,
+            )
+            for _, row in scored.iterrows()
+        ]
 
 
 def cli(argv=None):

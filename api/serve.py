@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import asdict
 from functools import lru_cache
 
 import pandas as pd
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from churn import config, registry
 from churn.data import validate_schema
+from churn.scoring import ScoredCustomer
 
 
 class CustomerPayload(BaseModel):
@@ -80,14 +82,8 @@ def create_app(run_dir: str | None = None) -> FastAPI:
         df = pd.DataFrame([row])[[config.ID_COL, *config.RAW_FEATURE_COLUMNS]]
         validate_schema(df, require_target=False)
 
-        scored = loaded.score(df).iloc[0]
-        return {
-            "customer_id": scored[config.ID_COL],
-            "churn_probability": float(scored["churn_probability"]),
-            "risk_tier": scored["risk_tier"],
-            "top_reason_codes": scored.get("top_reason_codes"),
-            "model_run_id": loaded.run_id,
-        }
+        record = ScoredCustomer.from_frame(loaded.score(df))[0]
+        return ScoreResponse(**asdict(record), model_run_id=loaded.run_id)
 
     return app
 
