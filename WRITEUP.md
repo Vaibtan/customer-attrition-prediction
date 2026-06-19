@@ -452,6 +452,29 @@ which is exactly why Logistic Regression ties the gradient-boosted models here.
 
 ---
 
+## Architecture — typed seams over stringly-typed glue
+
+The leak-free modelling pipeline is the deep part of this codebase; the
+surrounding glue is kept honest by giving every cross-module contract a **type**
+instead of a shared dict or a positional tuple. Five seams carry that load, each
+chosen by the *deletion test* (would removing it concentrate complexity, or just
+move it elsewhere?):
+
+| Seam | What it is | Failure it removes |
+|---|---|---|
+| `interpret.contributions` / `signed_coefficients` | one name-labelled `coef × z` frame, alignment asserted in a single place | reason codes silently mislabelling every customer's churn drivers on a column-order shift — green tests, wrong output |
+| `evaluate.CampaignThreshold` (+ `Economics`) | owns `t*`, break-even, the EV curve, and the risk-tier cutpoints together | `break_even` + grid search duplicated across three functions that had to stay in agreement |
+| `train.TrainingResult` ⊃ `HoldoutReport` | the training contract as one frozen object; `evaluate_holdout()` isolates the per-model sweep + the two bootstrap CIs + the EV sensitivity table | a 25-key `artifacts` dict whose renamed key surfaced as a `KeyError` three modules away |
+| `registry.LoadedModel.score(df)` | a loaded run that owns its own cutpoints + base linear | three callers each re-reaching into `meta["tier_cutpoints"]` before scoring |
+| `scoring.ScoredCustomer.from_frame` | the single map from `score_frame`'s columns to a typed record | the API re-mapping the output by string key, breaking silently on a column rename |
+
+These are **pure refactors**: the seed-`42` numbers throughout this document are
+byte-identical before and after (`t* = 0.510`, tiers 607/458/535, hold-out
+AUC 0.644, baseline EV +$1,688/1k), and the test suite grew from 40 to **46** as
+each seam turned a previously untestable failure mode into an assertion.
+
+---
+
 ## Deliberate omissions (and why)
 
 - **No XGBoost / LightGBM** — the gradient-boosted model already in the bake-off
@@ -478,7 +501,7 @@ uv run python -m churn.scoring --in data/customer_data.csv --out scored.csv
 uv run python -m churn.monitoring --reference data/customer_data.csv --current data/customer_data.csv
 uv sync --extra serve --all-groups     # optional FastAPI demo dependencies
 uv run uvicorn api.serve:app --reload
-uv run pytest -q                       # 40 tests (leakage, metrics, scoring, monitoring, API)
+uv run pytest -q                       # 46 tests (leakage, metrics, scoring, monitoring, API)
 uv run ruff check .                    # lint
 ```
 
