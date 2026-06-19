@@ -6,14 +6,14 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 
 from churn.evaluate import (
+    CampaignThreshold,
+    Economics,
     bootstrap_auc_ci,
     bootstrap_auc_diff_ci,
     classification_metrics,
     confusion_at,
     expected_value,
-    select_threshold,
     threshold_sensitivity,
-    tier_cutpoints,
 )
 
 
@@ -36,20 +36,26 @@ def test_precision_recall_f1_known_case():
     assert np.isclose(m["f1"], 0.5)
 
 
-def test_expected_value_and_threshold_selection():
+def test_campaign_threshold_selects_ev_maximising_boundary():
     y_true = np.array([0, 0, 1, 1])
     proba = np.array([0.1, 0.2, 0.7, 0.9])
-    t_star, best_ev, grid, ev = select_threshold(y_true, proba, cost=5, value=100, uplift=0.3)
-    assert 0.2 < t_star <= 0.7
-    assert np.isclose(best_ev, expected_value(y_true, proba, t_star, 5, 100, 0.3))
-    assert best_ev == ev.max()
+    ct = CampaignThreshold.fit(y_true, proba, Economics(cost=5, value=100, uplift=0.3))
+    assert 0.2 < ct.t_star <= 0.7
+    assert np.isclose(ct.best_ev, expected_value(y_true, proba, ct.t_star, 5, 100, 0.3))
+    assert ct.best_ev == ct.ev_curve.max()
+    assert np.isclose(ct.ev(y_true, proba), ct.best_ev)
+    assert np.isclose(ct.break_even, 5 / (100 * 0.3))
 
 
-def test_tier_cutpoints_ordering():
+def test_campaign_threshold_tiers_match_old_cutpoint_logic():
     proba = np.array([0.1, 0.2, 0.3, 0.4, 0.6, 0.8])
-    cut = tier_cutpoints(proba, t_star=0.5)
-    assert cut["t_star"] == 0.5
-    assert cut["t_mid"] <= cut["t_star"]
+    y_true = np.array([0, 0, 0, 1, 1, 1])
+    ct = CampaignThreshold.fit(y_true, proba, Economics(cost=20, value=200, uplift=0.2))
+    below = proba[proba < ct.t_star]
+    expected_mid = float(np.median(below)) if below.size else ct.t_star / 2.0
+    assert ct.t_mid == expected_mid
+    assert ct.cutpoints == {"t_mid": ct.t_mid, "t_star": ct.t_star}
+    assert ct.t_mid <= ct.t_star
 
 
 def test_confusion_at_uses_threshold():

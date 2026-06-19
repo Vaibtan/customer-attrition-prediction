@@ -64,8 +64,9 @@ def train_and_evaluate(df=None, seed: int = config.SEED, persist: bool = True) -
     oof = cross_val_predict(
         calibrated, X_train, y_train, cv=inner, method="predict_proba", n_jobs=-1
     )[:, 1]
-    t_star, best_ev, ev_grid, ev_curve = evaluate.select_threshold(y_train, oof)
-    cutpoints = evaluate.tier_cutpoints(oof, t_star)
+    threshold = evaluate.CampaignThreshold.fit(y_train, oof, evaluate.Economics.default())
+    t_star = threshold.t_star
+    cutpoints = threshold.cutpoints
 
     calibrated.fit(X_train, y_train)
     base_linear = None
@@ -103,9 +104,9 @@ def train_and_evaluate(df=None, seed: int = config.SEED, persist: bool = True) -
         "calibrated": calibrated,
         "base_linear": base_linear,
         "t_star": t_star,
-        "best_ev": best_ev,
-        "ev_grid": ev_grid,
-        "ev_curve": ev_curve,
+        "best_ev": threshold.best_ev,
+        "ev_grid": threshold.grid,
+        "ev_curve": threshold.ev_curve,
         "tier_cutpoints": cutpoints,
         "X_test": X_test,
         "y_test": y_test,
@@ -142,7 +143,7 @@ def train_and_evaluate(df=None, seed: int = config.SEED, persist: bool = True) -
             "per_model_metrics_test_half_threshold": per_model_metrics,
             "metrics_test_business_threshold": metrics_business,
             "metrics_test_half_threshold": metrics_half,
-            "expected_value_at_threshold": best_ev,
+            "expected_value_at_threshold": threshold.best_ev,
             "numeric_features": config.NUMERIC_FEATURES,
             "categorical_features": config.CATEGORICAL_FEATURES,
             "seed": seed,
