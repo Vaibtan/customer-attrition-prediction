@@ -25,10 +25,39 @@ def linear_clf(fitted_pipeline):
     return clf
 
 
-def odds_ratios(fitted_linear_pipeline) -> pd.DataFrame:
+def signed_coefficients(fitted_linear_pipeline) -> pd.Series:
+    """Coefficients indexed by feature name; the one place name<->coef alignment is asserted."""
     names = feature_names(fitted_linear_pipeline)
     coef = np.ravel(linear_clf(fitted_linear_pipeline).coef_)
-    df = pd.DataFrame({"feature": names, "coef": coef, "odds_ratio": np.exp(coef)})
+    if len(names) != coef.size:
+        raise ValueError(
+            f"name<->coef misalignment: {len(names)} feature names vs {coef.size} coefficients."
+        )
+    return pd.Series(coef, index=names, name="coef")
+
+
+def contributions(fitted_linear_pipeline, X) -> pd.DataFrame:
+    """Signed per-row contributions (coef * standardized value); columns ARE the feature names.
+
+    Returning a name-labelled frame makes the name<->coef<->z pairing structural: a caller
+    cannot read a contribution without the feature it belongs to.
+    """
+    coef = signed_coefficients(fitted_linear_pipeline)
+    z = np.asarray(fitted_linear_pipeline[:-1].transform(X), dtype="float64")
+    if z.shape[1] != coef.size:
+        raise ValueError(
+            f"z<->coef misalignment: transformed matrix has {z.shape[1]} columns "
+            f"vs {coef.size} coefficients."
+        )
+    index = X.index if hasattr(X, "index") else None
+    return pd.DataFrame(z * coef.to_numpy(), columns=list(coef.index), index=index)
+
+
+def odds_ratios(fitted_linear_pipeline) -> pd.DataFrame:
+    coef = signed_coefficients(fitted_linear_pipeline)
+    df = pd.DataFrame(
+        {"feature": coef.index, "coef": coef.to_numpy(), "odds_ratio": np.exp(coef.to_numpy())}
+    )
     return df.reindex(df["coef"].abs().sort_values(ascending=False).index).reset_index(drop=True)
 
 
@@ -48,14 +77,11 @@ def permutation_importance_df(model, X, y, scoring="roc_auc", n_repeats=10, seed
 
 def reason_codes_for_frame(base_linear_pipeline, X, k: int = 3) -> list[str]:
     """Top-k signed contributions (coef * standardized value) per row."""
-    coef = np.ravel(linear_clf(base_linear_pipeline).coef_)
-    pre = base_linear_pipeline[:-1]
-    z = np.asarray(pre.transform(X), dtype="float64")
-    names = feature_names(base_linear_pipeline)
-    contrib = z * coef
+    contrib = contributions(base_linear_pipeline, X)
+    names = contrib.columns.to_numpy()
 
     out = []
-    for row in contrib:
+    for row in contrib.to_numpy():
         idx = np.argsort(-np.abs(row))[:k]
         parts = [f"{names[j]}({'+' if row[j] >= 0 else '-'})" for j in idx]
         out.append("; ".join(parts))
