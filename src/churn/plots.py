@@ -1,6 +1,4 @@
-"""All figure generation. Uses the non-interactive Agg backend (no plt.show),
-so the entry point runs unattended in CI / from a clean checkout.
-"""
+"""Figure generation on the non-interactive Agg backend, so it runs unattended."""
 
 from __future__ import annotations
 
@@ -18,14 +16,14 @@ from sklearn.metrics import (  # noqa: E402
 
 from . import config  # noqa: E402
 
-_PRETTY = {
+MODEL_LABELS = {
     "logistic_regression": "Logistic Regression",
     "random_forest": "Random Forest",
     "hist_gradient_boosting": "HistGradientBoosting",
 }
 
 
-def _save(fig, name):
+def save_figure(fig, name):
     config.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     path = config.FIGURES_DIR / name
     fig.savefig(path, dpi=120, bbox_inches="tight")
@@ -55,7 +53,7 @@ def eda_overview(df, name="eda_overview.png"):
     axes[2].tick_params(axis="x", rotation=30)
 
     fig.suptitle("Exploratory overview", fontsize=13)
-    return _save(fig, name)
+    return save_figure(fig, name)
 
 
 def behavioural_by_churn(df, name="behavioural_by_churn.png"):
@@ -66,36 +64,36 @@ def behavioural_by_churn(df, name="behavioural_by_churn.png"):
             df.loc[df[config.TARGET] == 0, col].dropna(),
             df.loc[df[config.TARGET] == 1, col].dropna(),
         ]
-        # Clip spend for legibility (outliers handled in modelling, not here).
         if col == "monthly_spend":
             cap = df[col].quantile(0.95)
             data = [d.clip(upper=cap) for d in data]
         ax.boxplot(data, tick_labels=["Retained", "Churned"], showfliers=False)
         ax.set_title(col)
     fig.suptitle("Behavioural features by churn outcome", fontsize=13)
-    return _save(fig, name)
+    return save_figure(fig, name)
 
 
 def roc_curves(model_test_proba, y_test, name="roc_curves.png"):
     fig, ax = plt.subplots(figsize=(7, 6))
     for model_name, proba in model_test_proba.items():
-        fpr, tpr, _ = roc_curve(y_test, proba)
-        ax.plot(fpr, tpr, label=f"{_PRETTY.get(model_name, model_name)} (AUC={auc(fpr, tpr):.3f})")
+        fpr, tpr = roc_curve(y_test, proba)[:2]
+        label = f"{MODEL_LABELS.get(model_name, model_name)} (AUC={auc(fpr, tpr):.3f})"
+        ax.plot(fpr, tpr, label=label)
     ax.plot([0, 1], [0, 1], "k--", label="Random baseline")
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
     ax.set_title("ROC curves")
     ax.legend(loc="lower right")
-    return _save(fig, name)
+    return save_figure(fig, name)
 
 
 def pr_curve(y_test, proba, name="pr_curve.png"):
     fig, ax = plt.subplots(figsize=(7, 6))
     PrecisionRecallDisplay.from_predictions(y_test, proba, ax=ax)
     ax.axhline(np.mean(y_test), ls="--", color="grey", label="Base rate")
-    ax.set_title("Precision–Recall curve (best model)")
+    ax.set_title("Precision-Recall curve (best model)")
     ax.legend(loc="upper right")
-    return _save(fig, name)
+    return save_figure(fig, name)
 
 
 def confusion(cm, threshold, name="confusion_matrix.png"):
@@ -118,7 +116,7 @@ def confusion(cm, threshold, name="confusion_matrix.png"):
     ax.set_ylabel("Actual")
     ax.set_title(f"Confusion matrix (threshold = {threshold:.2f})")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    return _save(fig, name)
+    return save_figure(fig, name)
 
 
 def calibration(y_test, proba, name="calibration_curve.png"):
@@ -127,7 +125,7 @@ def calibration(y_test, proba, name="calibration_curve.png"):
     fig, ax = plt.subplots(figsize=(7, 6))
     CalibrationDisplay.from_predictions(y_test, proba, n_bins=10, ax=ax)
     ax.set_title("Reliability diagram (calibrated best model)")
-    return _save(fig, name)
+    return save_figure(fig, name)
 
 
 def permutation_importance(imp_df, name="feature_importance.png"):
@@ -136,7 +134,7 @@ def permutation_importance(imp_df, name="feature_importance.png"):
     ax.barh(top["feature"], top["importance"], xerr=top["std"], color="#8172b3")
     ax.set_title("Permutation importance (ROC-AUC drop)")
     ax.set_xlabel("Mean importance")
-    return _save(fig, name)
+    return save_figure(fig, name)
 
 
 def expected_value(grid, ev_curve, t_star, name="expected_value.png"):
@@ -148,4 +146,4 @@ def expected_value(grid, ev_curve, t_star, name="expected_value.png"):
     ax.set_ylabel("Expected campaign value (USD)")
     ax.set_title("Expected value vs. threshold")
     ax.legend()
-    return _save(fig, name)
+    return save_figure(fig, name)

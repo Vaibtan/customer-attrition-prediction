@@ -8,7 +8,7 @@ import pytest
 from churn import config
 from churn.data import load_data
 
-_DEFAULTS = {
+DEFAULTS = {
     "region": "North",
     "device_type": "Mobile",
     "subscription_plan": "Free",
@@ -23,8 +23,7 @@ _DEFAULTS = {
 
 
 def make_raw(**overrides) -> pd.DataFrame:
-    """Build a one-row raw-feature dataframe (id/target excluded) with overrides."""
-    row = {**_DEFAULTS, **overrides}
+    row = {**DEFAULTS, **overrides}
     return pd.DataFrame([row])[config.RAW_FEATURE_COLUMNS]
 
 

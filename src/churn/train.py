@@ -1,13 +1,4 @@
-"""Training orchestration: bake-off → calibrate → threshold → persist.
-
-Protocol (every fitted statistic is learned on training data only):
-  1. Stratified train/test hold-out (test used once, for headline metrics + plots).
-  2. Model bake-off by RepeatedStratifiedKFold ROC-AUC on train.
-  3. Calibrate the winner (sigmoid) so probabilities are trustworthy.
-  4. Out-of-fold probabilities → cost-based threshold t* + frozen tier cutpoints.
-  5. Refit on full train; evaluate once on the hold-out.
-  6. Persist model + uncalibrated linear base (for reason codes) + metadata.
-"""
+"""Training orchestration: bake-off -> calibrate -> threshold -> persist."""
 
 from __future__ import annotations
 
@@ -25,7 +16,7 @@ from .data import load_data, split_features_target, validate_schema
 from .pipeline import build_pipeline, candidate_models
 
 
-def _bakeoff(X_train, y_train, seed):
+def bakeoff(X_train, y_train, seed):
     cv = RepeatedStratifiedKFold(
         n_splits=config.CV_FOLDS, n_repeats=config.CV_REPEATS, random_state=seed
     )
@@ -38,14 +29,8 @@ def _bakeoff(X_train, y_train, seed):
     return results
 
 
-def _select_model(cv_results: dict) -> str:
-    """Pick the winner by CV ROC-AUC, but treat near-ties as ties.
-
-    Any model within ``MODEL_SELECTION_TOLERANCE`` of the best mean AUC is
-    statistically indistinguishable on this data; among those we take the first in
-    ``MODEL_PREFERENCE_ORDER`` (simplest / most interpretable / best-calibrated).
-    Falls back to the raw argmax if a model is missing from the preference list.
-    """
+def select_model(cv_results: dict) -> str:
+    """Pick the simplest model within MODEL_SELECTION_TOLERANCE of the best CV AUC."""
     best_auc = max(r["cv_auc_mean"] for r in cv_results.values())
     tied = {
         n
@@ -63,21 +48,18 @@ def train_and_evaluate(df=None, seed: int = config.SEED, persist: bool = True) -
         df = load_data()
     validate_schema(df)
 
-    X, y, _ = split_features_target(df)
+    X, y, ids = split_features_target(df)
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=config.TEST_SIZE, random_state=seed, stratify=y
     )
 
-    # 1) Bake-off → pick the best model, treating near-ties as ties (simplest wins).
-    cv_results = _bakeoff(X_train, y_train, seed)
-    best_name = _select_model(cv_results)
+    cv_results = bakeoff(X_train, y_train, seed)
+    best_name = select_model(cv_results)
     best_model = candidate_models(seed)[best_name]
 
-    # 2) Calibrate the winner.
     base_best = build_pipeline(best_model)
     calibrated = CalibratedClassifierCV(base_best, method="sigmoid", cv=config.CV_FOLDS)
 
-    # 3) Out-of-fold calibrated probabilities → cost-based threshold + tiers.
     inner = StratifiedKFold(n_splits=config.CV_FOLDS, shuffle=True, random_state=seed)
     oof = cross_val_predict(
         calibrated, X_train, y_train, cv=inner, method="predict_proba", n_jobs=-1
@@ -85,22 +67,16 @@ def train_and_evaluate(df=None, seed: int = config.SEED, persist: bool = True) -
     t_star, best_ev, ev_grid, ev_curve = evaluate.select_threshold(y_train, oof)
     cutpoints = evaluate.tier_cutpoints(oof, t_star)
 
-    # 4) Refit final model + an uncalibrated linear base for reason codes.
     calibrated.fit(X_train, y_train)
     base_linear = None
     if best_name == "logistic_regression":
         base_linear = build_pipeline(candidate_models(seed)["logistic_regression"])
         base_linear.fit(X_train, y_train)
 
-    # 5) Headline evaluation on the untouched hold-out.
     test_proba = calibrated.predict_proba(X_test)[:, 1]
     metrics_business = evaluate.classification_metrics(y_test, test_proba, t_star)
     metrics_half = evaluate.classification_metrics(y_test, test_proba, 0.5)
 
-    # Per-model hold-out probabilities (shared ROC plot) + a per-model metric
-    # table at the default 0.5 threshold. README P4.2 wants Precision/Recall/F1/
-    # ROC-AUC for *each* model on the test set; the winner additionally gets the
-    # calibrated, cost-thresholded treatment above (metrics_business/_half).
     model_test_proba = {}
     per_model_metrics = {}
     for name, model in candidate_models(seed).items():
@@ -109,9 +85,6 @@ def train_and_evaluate(df=None, seed: int = config.SEED, persist: bool = True) -
         model_test_proba[name] = proba
         per_model_metrics[name] = evaluate.classification_metrics(y_test, proba, 0.5)
 
-    # Quantify the "winner": a bootstrap CI on its hold-out AUC, plus a *paired*
-    # bootstrap CI of the gap to the runner-up. A diff-CI that straddles 0 is the
-    # evidence that the model ranking is a statistical tie (README P4 honesty).
     runner_up = max(
         (n for n in cv_results if n != best_name),
         key=lambda n: cv_results[n]["cv_auc_mean"],
@@ -120,8 +93,6 @@ def train_and_evaluate(df=None, seed: int = config.SEED, persist: bool = True) -
     auc_diff_ci = evaluate.bootstrap_auc_diff_ci(
         y_test, model_test_proba[best_name], model_test_proba[runner_up], seed=seed
     )
-
-    # Sensitivity of the dollar story to the (assumed) campaign economics.
     sensitivity = evaluate.threshold_sensitivity(
         y_train, oof, y_test, test_proba, config.COST_SCENARIOS
     )

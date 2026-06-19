@@ -1,9 +1,4 @@
-"""Metrics and the cost-based decision threshold.
-
-All ranking metrics (ROC-AUC, PR-AUC, Brier) are computed from probabilities,
-never from hard labels — passing labels to ``roc_auc_score`` was the starter's
-Bug #2 and is guarded against by ``tests/test_metrics.py``.
-"""
+"""Metrics, the cost-based decision threshold, and bootstrap/sensitivity helpers."""
 
 from __future__ import annotations
 
@@ -22,7 +17,6 @@ from . import config
 
 
 def classification_metrics(y_true, proba, threshold: float = 0.5) -> dict:
-    """Threshold-dependent (P/R/F1) + threshold-free (AUC/PR-AUC/Brier) metrics."""
     y_true = np.asarray(y_true)
     proba = np.asarray(proba, dtype="float64")
     pred = (proba >= threshold).astype(int)
@@ -38,7 +32,6 @@ def classification_metrics(y_true, proba, threshold: float = 0.5) -> dict:
 
 
 def expected_value(y_true, proba, threshold, cost, value, uplift) -> float:
-    """EV of contacting everyone scored at or above ``threshold``."""
     y_true = np.asarray(y_true)
     pred = np.asarray(proba) >= threshold
     tp = int(np.sum(pred & (y_true == 1)))
@@ -54,11 +47,7 @@ def select_threshold(
     uplift: float = config.CAMPAIGN_UPLIFT,
     grid=None,
 ):
-    """Pick the threshold maximising expected campaign value.
-
-    Returns ``(t_star, best_ev, grid, ev_curve)``. ``t_star`` becomes the
-    'high risk / contact now' boundary used for risk tiers.
-    """
+    """Return (t_star, best_ev, grid, ev_curve) maximising expected campaign value."""
     y_true = np.asarray(y_true)
     if grid is None:
         grid = np.linspace(0.0, 1.0, 101)
@@ -74,22 +63,18 @@ def bootstrap_auc_ci(
     seed: int = config.SEED,
     alpha: float = 0.05,
 ) -> dict:
-    """Percentile bootstrap CI for ROC-AUC on a fixed set of predictions.
-
-    Resamples the (y, proba) pairs with replacement ``n_rounds`` times. Rounds in
-    which the resample is single-class (AUC undefined) are skipped.
-    """
+    """Percentile bootstrap CI for ROC-AUC; single-class resamples are skipped."""
     y_true = np.asarray(y_true)
     proba = np.asarray(proba, dtype="float64")
     rng = np.random.default_rng(seed)
-    n = len(y_true)
-    aucs = []
-    for _ in range(n_rounds):
-        idx = rng.integers(0, n, n)
-        if np.unique(y_true[idx]).size < 2:
-            continue
-        aucs.append(roc_auc_score(y_true[idx], proba[idx]))
-    aucs = np.asarray(aucs)
+    draws = rng.integers(0, len(y_true), size=(n_rounds, len(y_true)))
+    aucs = np.asarray(
+        [
+            roc_auc_score(y_true[idx], proba[idx])
+            for idx in draws
+            if np.unique(y_true[idx]).size >= 2
+        ]
+    )
     return {
         "auc_lo": float(np.quantile(aucs, alpha / 2)),
         "auc_hi": float(np.quantile(aucs, 1 - alpha / 2)),
@@ -105,26 +90,19 @@ def bootstrap_auc_diff_ci(
     seed: int = config.SEED,
     alpha: float = 0.05,
 ) -> dict:
-    """Paired bootstrap CI for AUC(a) − AUC(b) on the same hold-out.
-
-    Both models are scored on the *same* resampled rows each round, so the CI
-    reflects the difference in ranking skill, paired. A CI that straddles 0 means
-    the two models are statistically indistinguishable on this data.
-    """
+    """Paired bootstrap CI for AUC(a) - AUC(b); a CI straddling 0 means a tie."""
     y_true = np.asarray(y_true)
     proba_a = np.asarray(proba_a, dtype="float64")
     proba_b = np.asarray(proba_b, dtype="float64")
     rng = np.random.default_rng(seed)
-    n = len(y_true)
-    diffs = []
-    for _ in range(n_rounds):
-        idx = rng.integers(0, n, n)
-        if np.unique(y_true[idx]).size < 2:
-            continue
-        diffs.append(
+    draws = rng.integers(0, len(y_true), size=(n_rounds, len(y_true)))
+    diffs = np.asarray(
+        [
             roc_auc_score(y_true[idx], proba_a[idx]) - roc_auc_score(y_true[idx], proba_b[idx])
-        )
-    diffs = np.asarray(diffs)
+            for idx in draws
+            if np.unique(y_true[idx]).size >= 2
+        ]
+    )
     return {
         "diff_mean": float(diffs.mean()),
         "diff_lo": float(np.quantile(diffs, alpha / 2)),
@@ -134,19 +112,13 @@ def bootstrap_auc_diff_ci(
 
 
 def threshold_sensitivity(y_val, val_proba, y_test, test_proba, scenarios) -> list[dict]:
-    """Recompute t* (on validation) and the hold-out EV across economic scenarios.
-
-    The dollar story is conditional on assumed campaign economics, so for each
-    ``scenario`` we re-derive the cost-optimal threshold on the validation (OOF)
-    probabilities and report the resulting hold-out EV per 1,000 customers — both
-    for model-targeting and for the contact-everyone baseline.
-    """
+    """Recompute t* (on validation) and report hold-out EV per economic scenario."""
     y_test = np.asarray(y_test)
     n_test = len(y_test)
     rows = []
     for name, p in scenarios.items():
         cost, value, uplift = p["cost"], p["value"], p["uplift"]
-        t_star, _, _, _ = select_threshold(y_val, val_proba, cost, value, uplift)
+        t_star = select_threshold(y_val, val_proba, cost, value, uplift)[0]
         ev_target = expected_value(y_test, test_proba, t_star, cost, value, uplift)
         ev_all = expected_value(y_test, test_proba, 0.0, cost, value, uplift)
         rows.append(
@@ -165,15 +137,7 @@ def threshold_sensitivity(y_val, val_proba, y_test, test_proba, scenarios) -> li
 
 
 def tier_cutpoints(proba, t_star: float):
-    """Derive the medium/high boundaries.
-
-    ``high`` is anchored to the business threshold ``t_star`` (campaign-worthy).
-    ``t_mid`` is the median of the validation scores *below* ``t_star``, so the
-    ``medium`` tier covers the upper half of those sub-threshold scores and
-    ``low`` the lower half. Both cutpoints are frozen here on the validation
-    distribution and persisted, so a customer's tier never depends on who else is
-    in their scoring batch.
-    """
+    """Medium/high tier boundaries, frozen on the validation score distribution."""
     proba = np.asarray(proba, dtype="float64")
     below = proba[proba < t_star]
     t_mid = float(np.median(below)) if below.size else float(t_star / 2.0)

@@ -220,7 +220,7 @@ diagnosis is preserved here.
 11. **RF impurity `feature_importances_`** is biased toward high-cardinality /
     continuous features. *Fix:* `permutation_importance` on the hold-out.
 12. **RF hard-coded as "best model"** with no comparison, confusion matrix at 0.5.
-    *Fix:* select by CV ROC-AUC with a **tie-aware rule** (`train._select_model`
+    *Fix:* select by CV ROC-AUC with a **tie-aware rule** (`train.select_model`
     prefers the simplest model within noise of the best, and a paired bootstrap CI
     documents the tie), then plot the winner's matrix at the **business
     threshold** `t*`.
@@ -252,7 +252,7 @@ probabilities are trustworthy — the entire value story depends on calibration.
 
 **Selection is tie-aware, not a third-decimal race.** The top two means differ by
 **0.002** — well inside the ±0.027 fold-to-fold spread (≈ 1 SE of the mean). The
-code (`train._select_model`) treats every model within a `0.01` AUC tolerance of
+code (`train.select_model`) treats every model within a `0.01` AUC tolerance of
 the best as a **statistical tie** and breaks the tie by an explicit preference
 order (simplest / most interpretable / best-calibrated first), rather than picking
 whichever third decimal happened to win on this seed. Logistic Regression is

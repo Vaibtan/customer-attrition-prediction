@@ -131,7 +131,7 @@ clearly beats blanket in the mid-cost regime (see WRITEUP Part 5).
 | Finding | Status | Where |
 |---|---|---|
 | #1 EV headline rests on hand-picked economics | **Fixed** | config comment rewritten to flag the economics as *illustrative, not measured*; `COST_SCENARIOS` + `evaluate.threshold_sensitivity` add a real sweep; WRITEUP Part 5 relabels the dollar figure as conditional and shows targeting only clearly wins mid-regime |
-| #2 "LogReg beats RF" on a 0.002 AUC gap inside noise | **Fixed** | `train._select_model` tie-aware rule (simplest within `MODEL_SELECTION_TOLERANCE`); `evaluate.bootstrap_auc_diff_ci` paired CI straddles 0; all docs reframed "wins" → "selected from a tie" |
+| #2 "LogReg beats RF" on a 0.002 AUC gap inside noise | **Fixed** | `train.select_model` tie-aware rule (simplest within `MODEL_SELECTION_TOLERANCE`); `evaluate.bootstrap_auc_diff_ci` paired CI straddles 0; all docs reframed "wins" → "selected from a tie" |
 | #3 Docker image can't score from a clean build | **Fixed** | `Dockerfile` trains + registers a model at build time (`RUN python -m churn.train`); CI runs the container and curls `/health` + `/score`; verified locally end-to-end |
 
 ---

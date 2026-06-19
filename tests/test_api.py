@@ -1,8 +1,4 @@
-"""FastAPI demo contract.
-
-The API dependencies are optional for the core modelling environment, so these
-tests skip unless the serving extra is installed.
-"""
+"""FastAPI demo contract; skipped unless the serving extra is installed."""
 
 from __future__ import annotations
 
@@ -21,7 +17,7 @@ from churn.pipeline import build_pipeline  # noqa: E402
 
 
 def test_score_endpoint_uses_registered_model(tmp_path, sample):
-    X, y, _ = split_features_target(sample)
+    X, y, ids = split_features_target(sample)
     model = build_pipeline(LogisticRegression(max_iter=500)).fit(X, y)
     meta = {
         "model_name": "logistic_regression",

@@ -1,23 +1,10 @@
-"""Customer Churn Prediction — end-to-end entry point.
-Runs the full exercise from a clean checkout::
-    uv run python churn_prediction.py
-
-Produces every figure in ``reports/figures/``, prints the EDA summary, the model
-bake-off, and the hold-out metrics, and persists the chosen model to the
-``models/`` registry. All preprocessing is leak-free (fit inside CV folds); the
-reported ROC-AUC comes from probabilities, not hard labels.
-
-This thin script orchestrates the ``churn`` package; the logic and the fixes for
-the starter's bugs live there (see WRITEUP.md for the full defect catalog).
-"""
+"""End-to-end entry point: EDA, model bake-off, metrics, figures, registered model."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-# Make the package importable without an install step, in case `uv sync` has not
-# installed it editable yet.
 SRC = Path(__file__).resolve().parent / "src"
 if SRC.exists() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -29,7 +16,7 @@ from churn.data import load_data  # noqa: E402
 from churn.train import train_and_evaluate  # noqa: E402
 
 
-def _print_eda(df: pd.DataFrame) -> None:
+def print_eda(df: pd.DataFrame) -> None:
     print("=" * 70)
     print("DATASET SUMMARY")
     print(f"Shape: {df.shape}  (rows x columns)")
@@ -53,7 +40,7 @@ def _print_eda(df: pd.DataFrame) -> None:
     print(df.groupby("region")[config.TARGET].mean().round(3).to_string())
 
 
-def _print_metrics(art: dict) -> None:
+def print_metrics(art: dict) -> None:
     print("\n" + "=" * 70)
     print("MODEL BAKE-OFF (RepeatedStratifiedKFold ROC-AUC on train)")
     for name, r in sorted(art["cv_results"].items(), key=lambda kv: -kv[1]["cv_auc_mean"]):
@@ -106,7 +93,7 @@ def _print_metrics(art: dict) -> None:
 
 def main() -> None:
     df = load_data()
-    _print_eda(df)
+    print_eda(df)
 
     print("\nGenerating EDA figures...")
     plots.eda_overview(df)
@@ -114,7 +101,7 @@ def main() -> None:
 
     print("Training (bake-off -> calibrate -> cost-based threshold)...")
     art = train_and_evaluate(df)
-    _print_metrics(art)
+    print_metrics(art)
 
     print("\nGenerating evaluation figures...")
     plots.roc_curves(art["model_test_proba"], art["y_test"])

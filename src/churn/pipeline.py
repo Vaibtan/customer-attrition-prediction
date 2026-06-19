@@ -1,16 +1,4 @@
-"""Assemble the leak-free modelling pipeline.
-
-Structure::
-
-    DomainRepair → FeatureEngineer → ColumnTransformer(
-        numeric:     Winsorizer(spend only) → SimpleImputer(median, +indicator) → StandardScaler
-        categorical: SimpleImputer(most_frequent) → OneHotEncoder(ignore unknown)
-    ) → estimator
-
-Everything that learns from data sits inside this object, so wrapping it in
-cross-validation guarantees each fold's statistics come from its training rows
-only. The exact same fitted object is reused at scoring time → no train/serve skew.
-"""
+"""Assemble the leak-free modelling pipeline; every fitted step lives inside it."""
 
 from __future__ import annotations
 
@@ -50,7 +38,6 @@ def build_preprocessor() -> ColumnTransformer:
 
 
 def build_pipeline(model) -> Pipeline:
-    """Wrap an estimator with the full leak-free preprocessing chain."""
     return Pipeline(
         steps=[
             ("repair", DomainRepair()),
@@ -62,12 +49,6 @@ def build_pipeline(model) -> Pipeline:
 
 
 def candidate_models(seed: int = config.SEED) -> dict:
-    """The model bake-off. Linear baseline + two nonlinear challengers.
-
-    The target is balanced (~48% churn), so we deliberately do NOT resample or
-    set class_weight — the 'imbalance' in this dataset is in subscription_plan,
-    not the label.
-    """
     return {
         "logistic_regression": LogisticRegression(max_iter=2000, random_state=seed),
         "random_forest": RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1),

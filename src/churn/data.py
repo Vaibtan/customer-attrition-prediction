@@ -1,10 +1,4 @@
-"""Data loading and a fail-fast schema contract.
-
-Loading does *no* cleaning — every fitted transformation lives inside the
-modelling pipeline so it can be fit per CV fold (this is the structural fix for
-the starter's data leakage). The only thing that happens here is reading the CSV
-and validating that it matches the contract.
-"""
+"""Data loading and a fail-fast schema contract; no cleaning happens here."""
 
 from __future__ import annotations
 
@@ -16,8 +10,7 @@ from . import config
 
 
 def load_data(path=config.DATA_PATH) -> pd.DataFrame:
-    """Read the raw customer CSV. Raises a clear error if the file is missing."""
-    path = Path(path)  # idempotent if already a Path
+    path = Path(path)
     if not path.exists():
         raise FileNotFoundError(
             f"Dataset not found at {path}. Expected it under data/customer_data.csv "
@@ -27,11 +20,6 @@ def load_data(path=config.DATA_PATH) -> pd.DataFrame:
 
 
 def validate_schema(df: pd.DataFrame, require_target: bool = True) -> None:
-    """Fail-fast data contract. Raises ``ValueError`` on any violation.
-
-    Training data must include the binary target. Scoring batches are allowed to
-    be targetless, but still need the customer id and all raw feature columns.
-    """
     expected = (
         config.EXPECTED_COLUMNS if require_target else [config.ID_COL, *config.RAW_FEATURE_COLUMNS]
     )
@@ -49,7 +37,6 @@ def validate_schema(df: pd.DataFrame, require_target: bool = True) -> None:
 
 
 def split_features_target(df: pd.DataFrame):
-    """Return (X, y, ids). X excludes id and target so the pipeline never sees them."""
     ids = df[config.ID_COL].reset_index(drop=True)
     y = df[config.TARGET].astype(int).reset_index(drop=True)
     X = df.drop(columns=[config.ID_COL, config.TARGET]).reset_index(drop=True)

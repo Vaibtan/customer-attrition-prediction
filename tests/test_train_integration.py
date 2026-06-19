@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from churn import config
 from churn.pipeline import candidate_models
-from churn.train import _select_model, train_and_evaluate
+from churn.train import select_model, train_and_evaluate
 
 
 def test_train_and_evaluate_sample(sample):
@@ -21,26 +21,22 @@ def test_train_and_evaluate_sample(sample):
     cut = art["tier_cutpoints"]
     assert cut["t_mid"] <= cut["t_star"]
 
-    # The honesty additions: a winner CI, a paired tie CI, and the EV sensitivity grid.
     assert art["auc_ci"]["auc_lo"] <= art["auc_ci"]["auc_hi"]
     assert art["auc_diff_ci"]["diff_lo"] <= art["auc_diff_ci"]["diff_hi"]
     assert len(art["sensitivity"]) == len(config.COST_SCENARIOS)
 
 
 def test_select_model_breaks_ties_toward_simplest():
-    # RF is the raw argmax but only 0.002 above LogReg → inside tolerance → tie →
-    # the preference order (LogReg first) wins. No third-decimal chasing.
     tied = {
         "logistic_regression": {"cv_auc_mean": 0.592, "cv_auc_std": 0.02},
         "random_forest": {"cv_auc_mean": 0.594, "cv_auc_std": 0.02},
         "hist_gradient_boosting": {"cv_auc_mean": 0.565, "cv_auc_std": 0.02},
     }
-    assert _select_model(tied) == "logistic_regression"
+    assert select_model(tied) == "logistic_regression"
 
-    # A genuine, beyond-tolerance lead is respected (not overridden by preference).
     clear = {
         "logistic_regression": {"cv_auc_mean": 0.55, "cv_auc_std": 0.02},
         "random_forest": {"cv_auc_mean": 0.70, "cv_auc_std": 0.02},
         "hist_gradient_boosting": {"cv_auc_mean": 0.60, "cv_auc_std": 0.02},
     }
-    assert _select_model(clear) == "random_forest"
+    assert select_model(clear) == "random_forest"

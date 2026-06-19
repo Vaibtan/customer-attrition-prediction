@@ -1,10 +1,4 @@
-"""Batch scoring + the stable risk-tier contract.
-
-Risk tiers use cutpoints frozen at training time (persisted in the registry), so
-a customer's tier depends only on their own probability — never on who else is
-in the batch and never differs between the batch CLI and the API. This is the
-fix for Codex finding #4 and is enforced by ``tests/test_scoring_contract.py``.
-"""
+"""Batch scoring plus the stable risk-tier contract (cutpoints frozen at training)."""
 
 from __future__ import annotations
 
@@ -19,10 +13,7 @@ from .interpret import reason_codes_for_frame
 
 
 def score_to_tier(proba, t_star: float, t_mid: float):
-    """Map probabilities to low/medium/high using FIXED cutpoints.
-
-    Vectorised; accepts a scalar or array. Pure function of (proba, cutpoints).
-    """
+    """Map probabilities to low/medium/high using fixed cutpoints (scalar or array)."""
     p = np.asarray(proba, dtype="float64")
     tiers = np.where(p >= t_star, "high", np.where(p >= t_mid, "medium", "low"))
     return tiers.item() if np.isscalar(proba) or p.ndim == 0 else tiers
@@ -36,7 +27,7 @@ def score_frame(
     base_linear=None,
     k: int = 3,
 ) -> pd.DataFrame:
-    """Score a raw customer dataframe → id, probability, tier, (reason codes)."""
+    """Score a raw customer dataframe into id, probability, tier, (reason codes)."""
     ids = (
         df_raw[config.ID_COL].to_numpy()
         if config.ID_COL in df_raw.columns
@@ -58,7 +49,7 @@ def score_frame(
     return out
 
 
-def _cli(argv=None):
+def cli(argv=None):
     parser = argparse.ArgumentParser(description="Batch churn scoring.")
     parser.add_argument("--in", dest="in_path", default=str(config.DATA_PATH))
     parser.add_argument("--out", dest="out_path", default="scored.csv")
@@ -77,4 +68,4 @@ def _cli(argv=None):
 
 
 if __name__ == "__main__":
-    _cli()
+    cli()

@@ -23,7 +23,6 @@ def test_data_quality_counts_known_invalid_rows(raw_full):
     assert lookup.loc["pages_per_session", "missing"] == 80
     assert lookup.loc["account_age_days", "invalid_range"] == 8
     assert lookup.loc["days_since_last_login", "invalid_range"] == 10
-    # valid lapsing customers (orders==0 with spend) are NOT flagged as a defect
     assert "orders_zero_with_spend" not in quality["column"].tolist()
 
 

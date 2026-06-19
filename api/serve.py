@@ -1,9 +1,4 @@
-"""FastAPI demo for single-customer churn scoring.
-
-Batch scoring remains the primary production path for this churn use case. This
-API deliberately reuses the registered sklearn pipeline and the shared
-``score_to_tier`` contract so it cannot drift away from the batch CLI.
-"""
+"""FastAPI demo for single-customer scoring; reuses the registered pipeline + tiers."""
 
 from __future__ import annotations
 
@@ -41,18 +36,18 @@ class ScoreResponse(BaseModel):
     model_run_id: str
 
 
-def _payload_dict(payload: CustomerPayload) -> dict:
+def payload_dict(payload: CustomerPayload) -> dict:
     if hasattr(payload, "model_dump"):
         return payload.model_dump()
     return payload.dict()
 
 
-def _state_key(run_dir: str | None) -> str:
+def state_key(run_dir: str | None) -> str:
     return run_dir or "__latest__"
 
 
 @lru_cache(maxsize=8)
-def _load_state(run_dir_key: str):
+def load_state(run_dir_key: str):
     run_dir = None if run_dir_key == "__latest__" else run_dir_key
     model, meta, base = registry.load_run(run_dir)
     cutpoints = meta["tier_cutpoints"]
@@ -65,12 +60,12 @@ def create_app(run_dir: str | None = None) -> FastAPI:
         version="0.1.0",
         description="Demo API; batch scoring is the primary workflow.",
     )
-    key = _state_key(run_dir or os.getenv("CHURN_MODEL_RUN_DIR"))
+    key = state_key(run_dir or os.getenv("CHURN_MODEL_RUN_DIR"))
 
     @app.get("/health")
     def health():
         try:
-            _, meta, _, _ = _load_state(key)
+            meta = load_state(key)[1]
         except FileNotFoundError:
             return {"status": "degraded", "model_loaded": False}
         return {"status": "ok", "model_loaded": True, "run_id": meta.get("run_id")}
@@ -78,11 +73,11 @@ def create_app(run_dir: str | None = None) -> FastAPI:
     @app.post("/score", response_model=ScoreResponse)
     def score(payload: CustomerPayload):
         try:
-            model, meta, base, cutpoints = _load_state(key)
+            model, meta, base, cutpoints = load_state(key)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-        row = _payload_dict(payload)
+        row = payload_dict(payload)
         if row.get(config.ID_COL) is None:
             row[config.ID_COL] = "api-request"
         df = pd.DataFrame([row])[[config.ID_COL, *config.RAW_FEATURE_COLUMNS]]
@@ -95,14 +90,13 @@ def create_app(run_dir: str | None = None) -> FastAPI:
             cutpoints["t_mid"],
             base_linear=base,
         ).iloc[0]
-        response = {
+        return {
             "customer_id": scored[config.ID_COL],
             "churn_probability": float(scored["churn_probability"]),
             "risk_tier": scored["risk_tier"],
             "top_reason_codes": scored.get("top_reason_codes"),
             "model_run_id": meta["run_id"],
         }
-        return response
 
     return app
 

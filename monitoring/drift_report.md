@@ -2,7 +2,7 @@
 
 - Reference rows: 1,600
 - Current rows: 1,600
-- Model run: 20260619T172954Z_logistic_regression
+- Model run: 20260619T182613Z_logistic_regression
 
 ## Data Quality
 

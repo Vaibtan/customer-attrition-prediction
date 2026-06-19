@@ -1,11 +1,4 @@
-"""Lightweight batch monitoring for scored churn data.
-
-The project deliberately avoids heavyweight monitoring infrastructure. This
-module emits a reproducible markdown report with:
-- data-quality counts for the current batch,
-- feature drift vs. a reference batch using PSI plus a KS statistic for numerics,
-- optional prediction-score drift when a registered model is available.
-"""
+"""Lightweight batch monitoring: data-quality, feature drift (PSI/KS), score drift."""
 
 from __future__ import annotations
 
@@ -22,7 +15,7 @@ REPORT_PATH = config.ROOT / "monitoring" / "drift_report.md"
 MISSING_TOKEN = "__MISSING__"
 
 
-def _psi_from_counts(reference_counts, current_counts, eps: float = 1e-6) -> float:
+def psi_from_counts(reference_counts, current_counts, eps: float = 1e-6) -> float:
     reference_counts = np.asarray(reference_counts, dtype="float64")
     current_counts = np.asarray(current_counts, dtype="float64")
     reference_pct = (reference_counts + eps) / (reference_counts.sum() + eps)
@@ -32,17 +25,15 @@ def _psi_from_counts(reference_counts, current_counts, eps: float = 1e-6) -> flo
 
 
 def categorical_psi(reference: pd.Series, current: pd.Series) -> float:
-    """Population stability index for categorical distributions."""
     ref = reference.astype("object").where(reference.notna(), MISSING_TOKEN)
     cur = current.astype("object").where(current.notna(), MISSING_TOKEN)
     levels = sorted(set(ref.unique()) | set(cur.unique()), key=str)
     ref_counts = ref.value_counts().reindex(levels, fill_value=0).to_numpy()
     cur_counts = cur.value_counts().reindex(levels, fill_value=0).to_numpy()
-    return _psi_from_counts(ref_counts, cur_counts)
+    return psi_from_counts(ref_counts, cur_counts)
 
 
 def numeric_psi(reference: pd.Series, current: pd.Series, bins: int = 10) -> float:
-    """Population stability index for numeric distributions using reference quantiles."""
     ref = pd.to_numeric(reference, errors="coerce").dropna().to_numpy(dtype="float64")
     cur = pd.to_numeric(current, errors="coerce").dropna().to_numpy(dtype="float64")
     if len(ref) == 0 or len(cur) == 0:
@@ -55,9 +46,9 @@ def numeric_psi(reference: pd.Series, current: pd.Series, bins: int = 10) -> flo
 
     edges[0] = -np.inf
     edges[-1] = np.inf
-    ref_counts, _ = np.histogram(ref, bins=edges)
-    cur_counts, _ = np.histogram(cur, bins=edges)
-    return _psi_from_counts(ref_counts, cur_counts)
+    ref_counts = np.histogram(ref, bins=edges)[0]
+    cur_counts = np.histogram(cur, bins=edges)[0]
+    return psi_from_counts(ref_counts, cur_counts)
 
 
 def ks_statistic(reference: pd.Series, current: pd.Series) -> float:
@@ -74,7 +65,6 @@ def ks_statistic(reference: pd.Series, current: pd.Series) -> float:
 
 
 def data_quality_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """Current-batch quality counts aligned with the modelling cleaning policy."""
     rows = []
     for col in config.RAW_FEATURE_COLUMNS:
         missing = int(df[col].isna().sum()) if col in df.columns else len(df)
@@ -87,14 +77,10 @@ def data_quality_summary(df: pd.DataFrame) -> pd.DataFrame:
             if hi is not None:
                 invalid += int((values > hi).sum())
         rows.append({"column": col, "missing": missing, "invalid_range": invalid})
-
-    # NB: we do not count `orders == 0 with spend > 0` as a defect — those are
-    # valid lapsing customers (90-day orders vs 6-month spend); see cleaning policy.
     return pd.DataFrame(rows)
 
 
 def feature_drift(reference: pd.DataFrame, current: pd.DataFrame) -> pd.DataFrame:
-    """Feature-level PSI and numeric KS drift metrics."""
     rows = []
     for col in config.RAW_FEATURE_COLUMNS:
         if col in config.BASE_NUMERIC:
@@ -107,12 +93,12 @@ def feature_drift(reference: pd.DataFrame, current: pd.DataFrame) -> pd.DataFram
     return pd.DataFrame(rows).sort_values("psi", ascending=False).reset_index(drop=True)
 
 
-def _score(model, df: pd.DataFrame) -> np.ndarray:
+def model_scores(model, df: pd.DataFrame) -> np.ndarray:
     drop = [c for c in (config.ID_COL, config.TARGET) if c in df.columns]
     return model.predict_proba(df.drop(columns=drop))[:, 1]
 
 
-def _markdown_table(df: pd.DataFrame, columns: list[str]) -> str:
+def markdown_table(df: pd.DataFrame, columns: list[str]) -> str:
     lines = ["| " + " | ".join(columns) + " |"]
     lines.append("| " + " | ".join(["---"] * len(columns)) + " |")
     for row in df[columns].itertuples(index=False):
@@ -132,7 +118,6 @@ def build_drift_report(
     model=None,
     run_id: str | None = None,
 ) -> str:
-    """Return a markdown drift report for a reference/current batch pair."""
     validate_schema(reference_df, require_target=False)
     validate_schema(current_df, require_target=False)
 
@@ -148,16 +133,16 @@ def build_drift_report(
         "",
         "## Data Quality",
         "",
-        _markdown_table(quality, ["column", "missing", "invalid_range"]),
+        markdown_table(quality, ["column", "missing", "invalid_range"]),
         "",
         "## Feature Drift",
         "",
-        _markdown_table(drift, ["feature", "psi", "ks"]),
+        markdown_table(drift, ["feature", "psi", "ks"]),
     ]
 
     if model is not None:
-        ref_scores = _score(model, reference_df)
-        cur_scores = _score(model, current_df)
+        ref_scores = model_scores(model, reference_df)
+        cur_scores = model_scores(model, current_df)
         score_psi = numeric_psi(pd.Series(ref_scores), pd.Series(cur_scores))
         lines.extend(
             [
@@ -189,14 +174,13 @@ def write_drift_report(
     out_path=REPORT_PATH,
     run_dir=None,
 ) -> Path:
-    """Load batches, optionally load a model, and write the monitoring report."""
     reference_df = load_data(reference_path)
     current_df = load_data(current_path)
 
     model = None
     run_id = None
     try:
-        model, meta, _ = registry.load_run(run_dir)
+        model, meta = registry.load_run(run_dir)[:2]
         run_id = meta.get("run_id")
     except FileNotFoundError:
         pass
@@ -208,7 +192,7 @@ def write_drift_report(
     return out
 
 
-def _cli(argv=None) -> None:
+def cli(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Generate a churn drift report.")
     parser.add_argument("--reference", default=str(config.DATA_PATH))
     parser.add_argument("--current", default=str(config.DATA_PATH))
@@ -221,4 +205,4 @@ def _cli(argv=None) -> None:
 
 
 if __name__ == "__main__":
-    _cli()
+    cli()
