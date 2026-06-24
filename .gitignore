@@ -11,3 +11,6 @@ models/*/
 scored.csv
 .DS_Store
 Thumbs.db
+
+# Git Bash crash artifacts
+*.stackdump
