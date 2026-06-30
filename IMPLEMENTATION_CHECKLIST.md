@@ -20,7 +20,11 @@
 
 ---
 
-## Phase 0 — Scaffolding + lock
+## Phase 0 — Scaffolding + Stage-1 lock
+
+> **Stage-1 lock only** (§4.6 / `PHASE0_LOCK_DECISIONS.md` D1–D4). Phase 0 freezes the
+> **world + protocol + floor-derivation/oracle method**. The **analysis spec, analysis-code hash,
+> and numeric floors are Stage 2 (end of Phase 1)** — NOT here.
 
 - [ ] **Repo layout** (§6): create package subdirs under `src/churn/` — `simulator/`,
       `featurestore/`, `streaming/`, `drift/`, `lifecycle/`, `backtest/` (each with
@@ -32,21 +36,42 @@
 - [ ] **`compose.yaml` skeleton**: service placeholders (redpanda, redis, prometheus,
       grafana, api, dashboard, dagster) — minimal but enough that `docker compose config`
       validates.
-- [ ] **CI scaffold**: extend `.github/workflows/ci.yml` with the new job structure +
-      the spec-hash guard job (below).
-- [ ] **`docs/simulator_spec.md`** (§4.6) — write **and freeze** the pre-registration:
-      latent process, event-emission functions, label rule (churn in `(t0, t0+90d]`),
-      control definitions (label-shuffle, null-stream), and the **pre-declared minimum
-      ΔROC-AUC and ΔPR-AUC** (the seed is recorded in the lock, not the spec).
-- [ ] **`simulator.lock.json`**: sha256 of spec + simulator config/params, seed, git SHA,
-      effect floors, control definitions. (A small hashing helper computes it — needed by the
-      §4.6 guard, which *recomputes the spec hash*.)
-- [ ] **Spec-hash CI guard** (§4.6): recompute spec hash, assert `== lock`, fail on mismatch
-      (or when spec + results change in the same commit). Lock embeds into every result
-      artifact (consumed in Phase 1).
+- [ ] **CI scaffold**: extend `.github/workflows/ci.yml` with the new job structure + the
+      lock-guard jobs (below); checkout uses **`fetch-depth: 0`** (Layer-2 needs the merge-base).
+- [ ] **`docs/simulator_spec.md`** (§4.6, D3) — write **and freeze** the world: latent process,
+      event-emission/hazard **functional forms**, label rule (churn in `(t0, t0+90d]`), temporal
+      contract (`features ∈ (−∞, t0]`), population + anchor (+ anchor-label re-simulation), control
+      definitions (label-shuffle, null-stream), the evaluation protocol, **and the frozen
+      oracle/floor-derivation protocol (D4)**. (Numeric floors are computed at Stage 2.)
+- [ ] **`simulator.params.json`** (D1): every numeric constant + functional-form selectors +
+      control definitions. **No confirmatory seed in the clear** — only the seed
+      commitment/recipe.
+- [ ] **Golden-vector conformance tests** (D1): deterministic fixtures (fixed inputs + params →
+      expected event-emission/hazard outputs) pinning that the code computes the *declared*
+      functional forms (catches a wrong-but-consistent formula the controls would miss).
+- [ ] **`simulator.lock.json`** (D1): sha256(spec) + sha256(params) + git SHA + the
+      **confirmatory-seed commitment/recipe** + control defs (reuses `registry.py` `hashlib` +
+      `git_sha()`). The analysis-code hash + numeric floors are **added at Stage 2**.
+- [ ] **`check_lock` script** (D2): recompute every hash, assert `== lock`, non-zero exit on drift;
+      reused by the Layer-1 CI job and asserted at runtime by the measurement entrypoint.
+- [ ] **Confirmatory-seed isolation** (D3): commit a **fully deterministic** beacon recipe — pinned
+      drand chain (chain hash + genesis + period), canonical KDF, and an **exact round rule**
+      (`R = first round at time ≥ T_trusted + Δ`), where **`T_trusted` = the protected-branch
+      merge/CI first-seen time, NOT the author's commit date**. CI rejects backdated commit dates
+      (skew window), requires `R` unemitted at first check, recomputes `R`, and rejects any other
+      seed. Sealed-hash is a multi-party-only fallback, not used here.
+- [ ] **CI guard — Layer 1 (consistency)** (§4.6 / D2): `lock` job recomputes hashes, asserts
+      `== lock`, fails on drift. Runs on push + PR.
+- [ ] **CI guard — Layer 2 (same-commit separation)** (D2): on PRs, fail if the change set touches
+      **both** the FROZEN set {`simulator_spec.md`, `simulator.params.json`, `simulator.lock.json`,
+      (Stage 2) `analysis_spec.json` + the **ANALYSIS code**} and the RESULTS set
+      {`reports/instrument_validation/**`}.
+- [ ] **Governance** (D2): protected branch + required review on any re-lock PR; no pushes that
+      bypass review.
 
-**GREEN:** `docker compose config` validates · existing test suite passes · spec + lock
-committed · CI guard active.
+**GREEN:** `docker compose config` validates · existing test suite passes · spec + params + lock +
+golden-vector tests committed · Layer-1 + Layer-2 guard + branch protection active. **Numeric
+floors and analysis spec NOT computed yet — that is Stage 2 (end of Phase 1).**
 
 ---
 
@@ -74,19 +99,54 @@ committed · CI guard active.
       vs event-AUC); `synthetic_static_auc` (static, **simulated** labels); and
       `synthetic_static_plus_event_auc` (static **+ event**, **simulated** labels — the
       positive-control headline).
-- [ ] **Positive control**: `synthetic_static_plus_event_auc − synthetic_static_auc` clears
-      the pre-registered floor on a paired bootstrap **ΔROC-AUC and ΔPR-AUC** lower bound.
-- [ ] **Negative controls**: label-shuffled events + null stream -> **no lift**.
-- [ ] **Measurement entrypoint**: recompute spec hash, assert `== lock`, refuse on mismatch;
-      embed lock in result artifacts; **record an honest null** if a floor is missed (never
-      retune).
+- [ ] **Develop on exploratory seed(s)** (D3): build features/model and the positive control
+      (`synthetic_static_plus_event_auc − synthetic_static_auc`) + negative controls (label-shuffle,
+      null stream → no lift) freely on **unlocked exploratory seeds**. The confirmatory seed is not
+      touched yet (it is unknowable until the Stage-2 lock — D3).
 - [ ] **Cohort diagnostics** (§4.5): side-by-side anchor vs synthetic — base rate, marginals
       + key joints, missingness, outliers, static-only AUC, calibration, score distributions.
       These **scope** results to a domain; they are **not a validity guarantee**.
 
-**GREEN:** sentinel suite passes · positive control clears the floors **and** negative
-controls show no lift (or an honest null is recorded against the lock) · cohort diagnostics
-committed.
+### End of Phase 1 — Stage-2 lock, then the single confirmatory run
+
+- [ ] **Freeze `analysis_spec.json`** (§4.6, D3): feature definitions (eligible aggregations +
+      windows + inclusion rules), model family + hyperparameters (inherits the tie-aware LogReg),
+      preprocessing, selection metric, bootstrap **unit = customer** + method, CI method, the D4
+      oracle protocol's **inputs/score/`N_oracle`**, key dependency versions. **Floor-computation
+      *design* (`N_oracle`, MDE replicate counts, domain tags, entrypoint) is fixed at Stage 1;
+      floor *RNG seeds* are held out — derived from the same beacon round `R` as the confirmatory
+      seed (domain-separated) — so they are neither author-chosen nor knowable before this freeze**
+      (closes re-review #3).
+- [ ] **Analysis-code hash** (D1/D2): hash the feature/model/eval/measurement modules; **activate
+      the Layer-2 ANALYSIS set** in the CI guard; extend `simulator.lock.json`.
+- [ ] **Execute the precommitted floor recipe + lock the numeric floor values** (§4.4, D4): **after
+      beacon round `R` emits**, run the precommitted floor entrypoint (design from Stage 1, RNG from
+      `R` via domain-separated tags) on the now-frozen pipeline — **MDE** (paired Monte-Carlo at
+      n=1,600, ≈`2.49·SE` at one-sided α=0.05 / 80% power) and the **oracle ceiling** →
+      `recoverable_lift`; floor = `max(MDE, 0.5·recoverable_lift)` per metric (ROC-AUC **and**
+      PR-AUC). **No free RNG/design choice.** Record floors + oracle ceiling + reference AUCs (full
+      precision) in `simulator.lock.json`; **CI re-derives the floors from `R` and verifies.**
+- [ ] **Confirmatory run (single shot)** (D3): reveal the seed per its commitment/recipe; run once;
+      the **positive control must clear both locked floors** on the paired-bootstrap ΔROC-AUC /
+      ΔPR-AUC **lower bound**.
+- [ ] **Measurement entrypoint** (§4.6): recompute every hash, assert `== lock`, refuse on
+      mismatch; embed the lock in result artifacts.
+- [ ] **Tamper-evident results** (D2): emit `reports/instrument_validation/**` carrying lock hash,
+      analysis-code hash, git SHA, clean-tree marker, seeds, **raw confirmatory predictions**. CI
+      **regenerates the raw predictions from scratch** in a clean checkout (locked spec/params +
+      beacon-derived seed + hashed analysis code), compares them **row-by-row / by content hash** to
+      the committed artifact, and only then recomputes the summary/verdict — so fabricated
+      predictions (not just an edited summary) fail. **CI applies the same regeneration to the
+      locked floors (from `R`), so the bar cannot be hand-set either** (closes re-review #2).
+- [ ] **Strict stopping rule** (D3): a confirmatory **miss is a recorded null** for that lock; any
+      re-run needs a **reviewed re-lock** → a fresh Stage-2 commit → a fresh **beacon-derived**
+      (still-unpredictable) seed — never a hand-picked/"sealed" seed, never a silent
+      bug-fix-and-rerun.
+
+**GREEN:** sentinel suite passes · **Stage-2 lock committed** (analysis_spec + analysis-code hash +
+numeric floors) · the **single confirmatory run** clears both locked floors with tamper-evident
+results **and** negative controls show no lift (or an honest null is recorded against the lock) ·
+cohort diagnostics committed.
 
 ---
 
