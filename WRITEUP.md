@@ -1,10 +1,9 @@
 # Write-up — Customer Churn Prediction
 
-> Decisions and findings for the AI Analyst exercise. Every number below is
-> measured on `data/customer_data.csv` by `uv run python churn_prediction.py`
-> (seed `42`); figures referenced live in `reports/figures/`. The deeper
-> engineering rationale lives in `IMPLEMENTATION_PLAN.md`; this document is the
-> reviewer-facing narrative.
+> Decisions and findings for the AI Analyst exercise — the single reviewer-facing
+> deliverable. Every number below is measured on `data/customer_data.csv` by
+> `uv run python churn_prediction.py` (seed `42`); figures referenced live in
+> `reports/figures/`.
 
 ---
 
@@ -452,6 +451,21 @@ which is exactly why Logistic Regression ties the gradient-boosted models here.
 
 ---
 
+## Engineering decisions (D1–D6)
+
+Scope was fixed up front as six decisions; each was an explicit fork, recorded with its choice.
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| **D1** | Deliverable shape | **Full MLOps showcase** — `src/churn/` package + tests + FastAPI demo + local registry + monitoring + CI + Docker, fronted by a runnable `churn_prediction.py` | Maximises engineering signal; kept honest by making every component demonstrate domain judgment and keeping infra lightweight where heavy infra adds no insight (D4). |
+| **D2** | Serving design | **Batch-first; REST as a labelled demo** | Retention scoring is a nightly **batch** problem (score → hand the high-risk segment to the campaign tool); a real-time-only API would misread the domain. The batch CLI is the real path, `/score` a pattern demo. |
+| **D3** | Modelling story | **Honest diagnosis + business value** | Given the ~0.62 ceiling (TL;DR), an honest diagnosis plus a value story under uncertainty beats a fabricated headline number. |
+| **D4** | Tracking / registry | **Lightweight local registry** (`models/<run_id>/` + `metadata.json`), MLflow noted as the prod swap-in | Reproducible with zero infra at this scale; an MLflow server here would be the cargo-cult this project avoids (see Deliberate omissions). |
+| **D5** | Interpretability | **sklearn-native** — standardized LogReg odds ratios + `permutation_importance` + per-customer reason codes | Exact for the linear winner; avoids RF impurity bias and a heavyweight SHAP dependency (see Deliberate omissions). Reason codes feed `scored.csv` (Part 5). |
+| **D6** | CI/CD | **Full** — ruff + pytest (coverage gate) + pipeline smoke run + Docker build/publish + manual-gated deploy | Maximum lifecycle surface; the deploy stage is a documented, manually-gated placeholder (no live target). |
+
+---
+
 ## Architecture — typed seams over stringly-typed glue
 
 The leak-free modelling pipeline is the deep part of this codebase; the
@@ -501,7 +515,7 @@ uv run python -m churn.scoring --in data/customer_data.csv --out scored.csv
 uv run python -m churn.monitoring --reference data/customer_data.csv --current data/customer_data.csv
 uv sync --extra serve --all-groups     # optional FastAPI demo dependencies
 uv run uvicorn api.serve:app --reload
-uv run pytest -q                       # 46 tests (leakage, metrics, scoring, monitoring, API)
+uv run pytest -q                       # run the test suite (leakage, metrics, scoring, monitoring, API)
 uv run ruff check .                    # lint
 ```
 

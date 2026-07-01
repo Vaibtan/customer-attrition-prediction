@@ -38,8 +38,8 @@ docker run --rm -p 8000:8000 churn-scoring
 ```
 
 The main run writes PNG figures to `reports/figures/` and a registered model to
-`models/<run_id>/`. `WRITEUP.md` contains the reviewer-facing explanation and
-`IMPLEMENTATION_PLAN.md` maps implementation choices to the locked D1-D6 scope.
+`models/<run_id>/`. `WRITEUP.md` is the reviewer-facing deliverable — decisions
+(incl. the D1-D6 scope), findings, and interpretation.
 
 ---
 
@@ -64,7 +64,6 @@ You have been given a dataset of **1,600 customer records**, each labelled with 
 ├── models/              ← Generated local model registry entries
 ├── churn_prediction.py  ← End-to-end entry point
 ├── WRITEUP.md           ← Decisions, findings, and interpretation
-├── IMPLEMENTATION_PLAN.md
 ├── Dockerfile
 ├── .github/workflows/ci.yml
 └── README.md            ← This file
