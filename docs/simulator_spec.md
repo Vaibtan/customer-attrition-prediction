@@ -90,7 +90,10 @@ h(t0)    = h_52
 ```
 
 Numbers: `s_μ = quality_index.s_mu`; `κ = latent.kappa`, `σ = latent.sigma`, `σ0 = latent.sigma0`.
-At `κ ≈ 0.2` the process is stationary well within 52 weeks, so `h(t0) ~ N(μ(x), σ0²)`.
+At `κ = 0.05` (D7 re-lock; ~20-week memory) the process is stationary well within 52 weeks, so
+`h(t0) ~ N(μ(x), σ0²)`. `κ` is **ceiling-neutral** — the stationary `h(t0)` distribution the oracle
+and static AUCs depend on does not involve `κ` — so it governs only how *observable* the frozen
+health signal is from the event history (a proxy-quality knob; see §7 provenance and D7).
 
 **Health is weakly static-seeded and largely idiosyncratic** (frozen split `Var(μ) : Var(stochastic
 h) ≈ 1 : 13`). This is the *intended, disclosed* consequence of a large recoverable gap (§7): if
@@ -139,8 +142,10 @@ ceiling the pipeline can *recover* — not the ceiling itself), so they are **no
 **Sign convention (frozen in the numbers):** `b_L, b_P, b_O, b_T > 0` (healthier → more logins,
 deeper sessions, more orders, more positive sentiment); `b_F, b_S, b_D < 0` (unhealthier → more
 payment failures, more support tickets, more downgrades). Baselines at `h = 0` are the designed
-semantics (~4 logins/wk, ~8 pages/session, ~0.5 orders/wk, ~5% payment failure, ~0.15 tickets/wk,
-neutral sentiment, ~2% downgrade/cycle) — pinned by the binding golden vectors.
+semantics (D7 re-lock: ~6 logins/wk, ~8 pages/session, ~1 order/wk, ~7% payment failure,
+~0.4 tickets/wk, neutral sentiment, ~3% downgrade/cycle) — pinned by the binding golden vectors.
+The event coefficients set **proxy quality** (how strongly and cleanly events reveal `h`), not the
+ceiling (§7/§8); they were strengthened in the D7 re-lock to make recovery feasible.
 
 > **Frozen vs Phase-1 boundary (scope, disclosed).** Stage 1 freezes the event **links** (rate /
 > prob / mean as a function of `h`) + the declared **draw families** (Exponential / Bernoulli /

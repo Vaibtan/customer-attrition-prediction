@@ -86,12 +86,12 @@ def test_committed_params_match_tuning_source_constants(params):
 
 def test_event_family_baselines_match_the_frozen_design(params):
     ev = params["events"]
-    # At h = 0 each link returns its designed baseline (the a-priori semantics).
-    assert K.exp_link(0.0, **_ab(ev["login_rate"])) == pytest.approx(4.0)  # ~4 logins/wk
-    assert K.exp_link(0.0, **_ab(ev["order_rate"])) == pytest.approx(0.5)  # ~0.5 orders/wk
-    assert K.exp_link(0.0, **_ab(ev["support_rate"])) == pytest.approx(0.15)  # ~0.15 tickets/wk
-    assert K.logistic_link(0.0, **_ab(ev["payment_fail"])) == pytest.approx(0.05)  # ~5% failure
-    assert K.logistic_link(0.0, **_ab(ev["downgrade"])) == pytest.approx(0.02)  # ~2% downgrade
+    # At h = 0 each link returns its designed baseline (the a-priori semantics; D7 re-lock values).
+    assert K.exp_link(0.0, **_ab(ev["login_rate"])) == pytest.approx(6.0)  # ~6 logins/wk
+    assert K.exp_link(0.0, **_ab(ev["order_rate"])) == pytest.approx(1.0)  # ~1 order/wk
+    assert K.exp_link(0.0, **_ab(ev["support_rate"])) == pytest.approx(0.4)  # ~0.4 tickets/wk
+    assert K.logistic_link(0.0, **_ab(ev["payment_fail"])) == pytest.approx(0.07)  # ~7% failure
+    assert K.logistic_link(0.0, **_ab(ev["downgrade"])) == pytest.approx(0.03)  # ~3% downgrade
     assert K.linear_link(0.0, **_ab(ev["session_depth"])) == pytest.approx(8.0)  # ~8 pages
     assert K.linear_link(0.0, **_ab(ev["sentiment"])) == pytest.approx(0.0)  # neutral
 
@@ -100,7 +100,7 @@ def test_frozen_event_directions(params):
     ev = params["events"]
     # Healthier -> more logins; unhealthier -> more payment failures.
     assert K.exp_link(1.0, **_ab(ev["login_rate"])) > K.exp_link(-1.0, **_ab(ev["login_rate"]))
-    assert K.exp_link(1.0, **_ab(ev["login_rate"])) == pytest.approx(4.0 * math.exp(0.4))
+    assert K.exp_link(1.0, **_ab(ev["login_rate"])) == pytest.approx(6.0 * math.exp(0.7))
     assert K.logistic_link(-1.0, **_ab(ev["payment_fail"])) > K.logistic_link(
         1.0, **_ab(ev["payment_fail"])
     )

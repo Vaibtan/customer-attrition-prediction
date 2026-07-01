@@ -34,25 +34,34 @@ PLAN_SCORE_MAP = {"Free": 0.0, "Basic": 1.0, "Premium": 2.0, "Enterprise": 3.0}
 QI_WEIGHTS = {"plan": 1.0, "age": 0.25, "spend": 0.20, "aov": 0.15}  # plan dominates (anchor)
 STATIC_NUMERICS = P.STATIC_NUMERICS
 
-# --- Fixed latent knobs (D5.1 / D5.9) --------------------------------------------------------
-KAPPA = 0.2  # weekly mean-reversion speed
+# --- Fixed latent knobs (D5.1 / D5.9 / D7) ---------------------------------------------------
+# kappa = weekly mean-reversion speed. D7 re-lock: 0.2 -> 0.05. kappa is CEILING-NEUTRAL -- the
+# stationary h(t0) ~ N(mu(x), sigma0^2) distribution the oracle/static AUCs depend on does not
+# involve kappa (the regime MC below evaluates at stationarity) -- it governs only how OBSERVABLE
+# the frozen health signal is from the event history (a proxy-quality knob, like the event coeffs).
+# A slower reversion (kappa 0.05, ~20-week memory) leaves more of h(t0) predictable from the
+# observed weeks, lifting the clairvoyant recovery ceiling above the pre-registered f=0.5 floor so a
+# leak-free pipeline can genuinely recover the injected signal (the D5.9 recovery-feasibility fix).
+KAPPA = 0.05  # weekly mean-reversion speed (D7; was 0.2)
 SIGMA_H = 1.0  # stochastic health std at stationarity
 DIRECT_STATIC_FRACTION = 0.5  # a_stat = f * A; the rest of static's effect flows via mu(x)
 
-# --- a-priori event-emission coefficients (D5.5) -- NOT tuned; do not affect the ceiling -----
-# Health h has ~unit scale (q unit-variance, sigma_h = 1), so h ranges roughly [-3, 3].
+# --- a-priori event-emission coefficients (D5.5 / D7) -- NOT tuned; do not affect the ceiling ---
+# Health h has ~unit scale (q unit-variance, sigma_h = 1), so h ranges roughly [-3, 3]. D7 re-lock
+# strengthened these (higher baseline rates + steeper health slopes) so events are stronger, lower-
+# noise proxies of h -- proxy quality only (the ceiling depends solely on latent+hazard+static).
 EVENT_PARAMS = {
     # Login/engagement family: healthier -> more logins, deeper sessions, more orders (b > 0).
-    "login_rate": {"a": float(np.log(4.0)), "b": 0.40},  # ~4 logins/wk at h=0
-    "session_depth": {"a": 8.0, "b": 1.00, "tau": 2.0},  # ~8 pages/session at h=0
-    "order_rate": {"a": float(np.log(0.5)), "b": 0.30},  # ~0.5 orders/wk at h=0
+    "login_rate": {"a": float(np.log(6.0)), "b": 0.70},  # ~6 logins/wk at h=0
+    "session_depth": {"a": 8.0, "b": 1.80, "tau": 2.0},  # ~8 pages/session at h=0 (steep readout)
+    "order_rate": {"a": float(np.log(1.0)), "b": 0.50},  # ~1 order/wk at h=0
     # Payment family: unhealthy -> more failures (b < 0).
-    "payment_fail": {"a": float(np.log(0.05 / 0.95)), "b": -0.70},  # ~5% failure at h=0
+    "payment_fail": {"a": float(np.log(0.07 / 0.93)), "b": -1.00},  # ~7% failure at h=0
     # Support family: unhealthy -> more tickets, more negative sentiment.
-    "support_rate": {"a": float(np.log(0.15)), "b": -0.40},  # ~0.15 tickets/wk at h=0
-    "sentiment": {"a": 0.0, "b": 0.50, "tau": 0.5},  # neutral sentiment at h=0
+    "support_rate": {"a": float(np.log(0.4)), "b": -0.70},  # ~0.4 tickets/wk at h=0
+    "sentiment": {"a": 0.0, "b": 0.85, "tau": 0.5},  # neutral sentiment at h=0 (steep readout)
     # Downgrade family: healthier -> rarely downgrades (b < 0).
-    "downgrade": {"a": float(np.log(0.02 / 0.98)), "b": -0.60},  # ~2% downgrade/cycle at h=0
+    "downgrade": {"a": float(np.log(0.03 / 0.97)), "b": -0.80},  # ~3% downgrade/cycle at h=0
 }
 
 # --- Tuning targets (D5.9) -------------------------------------------------------------------

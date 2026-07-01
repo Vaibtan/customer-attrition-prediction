@@ -41,8 +41,8 @@ def test_tuning_main_regenerates_a_valid_world(tmp_path, monkeypatch):
     params = json.loads((tmp_path / "simulator.params.json").read_text())
     assert params["schema_version"] == 1
     assert {"latent", "quality_index", "hazard", "events", "controls"} <= params.keys()
-    # a-priori event params are copied through unchanged
-    assert params["events"]["login_rate"]["b"] == 0.4
+    # a-priori event params are copied through unchanged (D7 re-lock value)
+    assert params["events"]["login_rate"]["b"] == 0.7
     # tuned hazard coefficients carry the frozen sign convention (churn falls with h and q)
     assert params["hazard"]["alpha_h"] < 0 and params["hazard"]["alpha_stat"] < 0
 

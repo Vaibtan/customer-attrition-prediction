@@ -449,3 +449,238 @@ is the frozen math.
 > "Stage-1-fixed" claim is actually attested (Codex round). Every pass/fail RNG stream has a
 > dedicated beacon domain tag (confirmatory + its bootstrap, oracle, MDE, floor-bootstrap, both
 > controls).
+
+---
+
+## D6 — Phase-1 generator & offline-store implementation forks (2026-07-02)
+
+The Phase-1 *implementation* choices the handoff flagged as genuine forks. **None is frozen at
+Stage 1** (the spec §5 "Frozen vs Phase-1 boundary" is explicit: the links + draw families +
+coefficients are frozen; the generator *implementation* — timestamp placement, cadence, clipping,
+the population sampler, and the store layout — is Phase-1 code, pinned by golden vectors + the
+leakage-sentinel suite + the Stage-2 analysis freeze). Recorded here so the choices are auditable
+and so the invariants they must preserve are explicit. Adversarially pressure-tested (workflow,
+4 critics) against four failure modes: PIT/temporal violation, ceiling contamination / tautological
+recovery, online/offline-parity infeasibility (Phase 2), and frozen-spec conflict.
+
+**Invariants every D6 choice preserves.** (i) *Label independence* — the churn label is a single
+Bernoulli at `t0` from `hazard_prob(h(t0), q)`; it is **never** an input to event generation.
+(ii) *Ceiling invariance* — `oracle_auc`/`static_auc`/`recoverable_lift` depend only on
+latent+hazard+static (D5.9), so no generator choice can move them; the generator only sets *proxy
+quality* (how much of the fixed ceiling the pipeline can recover). (iii) *PIT contract* —
+`max(feature_ts) ≤ t0 < min(label_ts)`; every event feeding a feature has `event_ts ≤ t0`.
+(iv) *Determinism* — the whole generator is a pure function of `(frozen params, seed)` via NumPy
+`Generator`/`SeedSequence` with per-stream domain spawning, so a `(customer, seed)` replays bit-for-bit.
+
+### D6.1 — Event-log schema: one tidy long event stream (not per-type tables / not wide)
+
+A single canonical event log `events(event_id, customer_id, event_ts, event_type, value)` — the
+exact shape a Kafka/Redpanda topic carries (Phase 2 replays these rows verbatim). `event_type ∈
+{login, order, payment_fail, support, downgrade}`; all five are **occurrence** events (one row per
+occurrence). `value` is a nullable type-specific payload: `login` carries `pages_per_session`
+(session depth), `support` carries the ticket `sentiment`, and `order`/`payment_fail`/`downgrade`
+are count-only (`value` NULL). **`event_id`** (Codex round, D6.1 major) is a stable, deterministic
+idempotency key `"{customer_id}:{event_type}:{seq}"` (per-customer per-type sequence) so the offline
+DuckDB `COUNT`/aggregations and the online Quix aggregation collapse a **redelivered duplicate
+identically** — without it a duplicate double-counts on one side only and the §3 parity test breaks
+under the "duplicate/reordered" stream. **Why:** a long log is the transport-faithful representation
+(mirrors the stream, so the offline DuckDB PIT and the online Quix aggregation consume the *same*
+events → the §3 parity test is meaningful), keeps ASOF/window PIT queries first-class, and folds
+session-depth into the login family exactly as D5.5 declares. Per-type tables would fork the
+offline/online representations and weaken parity; a wide per-week matrix would bake in a window and
+destroy event-time semantics.
+
+### D6.2 — Per-week timestamp placement: Exponential-arrival rate process (Poisson-count representation) + placement-week Bernoulli
+
+Rate families (`login`, `order`, `support`, all `exp_link`): the frozen family is the
+**Exponential-inter-arrival** homogeneous Poisson process at the piecewise-constant weekly rate
+`λ(h_w) = exp(a+b·h_w)`. It is *realized* by its exact count marginal `count_w ~ Poisson(λ(h_w))` per
+week `w` + **uniform** placement within week `w` (conditional on the count, Poisson arrival times
+*are* uniform order statistics — identical law to drawing Exponential inter-arrivals, no new family;
+this reconciles the D5.10 "Exponential/Bernoulli/Normal" list, Codex round D6.2-minor). `login`
+events carry `pages ~ N(a_P+b_P·h_w, τ_P²)` (clipped ≥ 1); `support` events carry `sentiment ~
+N(a_T+b_T·h_w, τ_T²)` (clipped to [−1, 1]). Per-cycle Bernoulli families (`payment_fail`,
+`downgrade`, both `logistic_link`) fire on a **4-week billing cycle** (13 cycles / 52 wk): per cycle,
+**draw the placement week `w★` uniformly among the cycle's weeks first**, then `fail ~ Bernoulli(σ(a
++ b·h_{w★}))`; on a hit, emit one event at a uniform time within `w★`. **Placement-week (not
+terminal-week) evaluation is load-bearing (Codex round D6.2-major):** it makes an event's
+*existence* depend only on health at or before its own timestamp — exactly what the rate families
+already satisfy — so a panel row with `t0` inside a cycle cannot leak post-`t0` health via a
+pre-`t0` payment/downgrade event. The `n=1600` anchor (`t0 = h_52`, after every cycle) was safe
+either way, but the fix must land **before** any panel/backfill rows (Phase 5). **Why:**
+Exponential-arrival + uniform placement is the canonical event-stream realization of the frozen
+`exp_link` rate; the irregular, out-of-week-order timestamps are exactly what stress the ASOF PIT
+boundary and the Phase-2 late/reordered parity fixtures; 4-week cycles are realistic billing cadence.
+Draw families are the D5.5/D5.10-declared Exponential/Bernoulli/Normal; clipping is disclosed
+Phase-1 code (§5 boundary), not a frozen form.
+
+### D6.3 — Storage: Parquet on disk (durable log) + DuckDB as the compute/query layer
+
+The event log, the `customers` static table, the `labels` table, and the `cohort(customer_id, t0)`
+driver are persisted as **Parquet**; **DuckDB** runs the ASOF + windowed-aggregate PIT queries over
+them. **Why:** Parquet is the lakehouse-standard durable columnar log DuckDB reads zero-copy, and it
+is the same byte stream Phase 2 replays into Redpanda; DuckDB keeps the ASOF join reviewable (the §7
+PIT centerpiece) with no server. At 50k customers everything fits memory — single file per table, no
+partitioning yet (revisited if Phase 5 backfills need it). Feature layer is `featurestore/` offline
+half; the online (Redis) half is Phase 2.
+
+### D6.4 — Population joint-fit: plan-stratified empirical resampling + marginal draws for non-anchored columns
+
+Draw `subscription_plan` from its anchor marginal; within each plan stratum **independently**
+bootstrap `monthly_spend`, `account_age_days`, `region`, **and `avg_order_value`** from that plan's
+real anchor rows (each drawn from `P(col | plan)` — preserves the fitted `plan×spend`, `plan×age`,
+`plan×region` joints and, per D5.7, keeps the columns conditionally independent given plan). `aov`
+is drawn plan-conditionally too (Codex round D6.4-minor): it feeds `q(x)` with weight 0.15 and the
+frozen regime was tuned via a whole-anchor-row `q` bootstrap that preserves its real dependence on
+plan, so a *global-marginal* draw (which imposes **marginal**, not conditional, independence from
+plan) would flatten `P(aov|plan)` and mis-scale the Stage-2 floor MC relative to the anchor the
+confirmatory control is measured on. `device_type` (zero `q`-weight, in no fitted joint) is drawn
+from the global marginal. Continuous numerics get light **multiplicative log-normal** jitter
+(`×exp(N(0, 0.05))`) — multiplicative, not additive, because the columns are non-negative and
+heavy-tailed, so additive jitter scaled to the tail-dominated std would swamp typical values and,
+after clipping negatives at 0, bias the median upward; `×exp(N(0,·))` preserves positivity and the
+median while de-tiling the 1,600. **The 1,600 anchor rows keep their real static attributes
+verbatim** (not resampled) — only their health path, events, and label are re-simulated (D5.7).
+Population = 1,600 anchor + 48,400 synthetic = 50,000. **Why:** empirical resampling reproduces the
+fitted marginals+joints with no parametric assumption on the heavy-tailed spend/aov columns
+(median 56 vs mean 243 — a Gaussian fit would lie); non-parametric is the honest choice and keeps
+the synthetic population production-shaped without smuggling any label information (invariant i).
+
+### D6.5 — Feature layer: a rich PIT event-feature set now, frozen subset at Stage 2
+
+Phase-1 exploratory computes a generous set of PIT aggregates the model can use to reconstruct
+`h(t0)` — login recency (ASOF `days_since_last_login`) + recent login frequency/trend, order count,
+support-ticket count, mean sentiment, payment-failure count, downgrade count, mean session depth —
+each over a declared lookback ending at `t0` (strict `event_ts ≤ t0`). The **exact** feature set +
+windows are frozen in `analysis_spec.json` at Stage 2 (D3). **Why:** `h` is Markov with ~5–7-week
+memory (κ≈0.2), so recent-window aggregates are the informative proxies; giving the model several
+complementary views de-risks the D5.9 recovery-feasibility residual. Windows are an exploratory
+choice now, frozen before the confirmatory seed is drawn — no p-hacking surface (the confirmatory
+seed is beacon-derived and untouched until Stage 2). **Parity constraint (Codex round D6.5-minor):**
+every event feature is a deterministic function of the event set **deduplicated by `event_id`** and
+filtered to `event_ts ≤ t0` — counts/means over that set, recency `= t0 − max(event_ts)`, any trend
+over **fixed event-time buckets** — with **no processing-time / arrival-order state**, so the offline
+DuckDB feature and the online Quix feature are byte-identical under late/duplicate/reordered streams.
+
+### D6.6 — Empty-window feature semantics (Codex completeness round)
+
+A customer can draw **zero** events of a family over all 52 weeks (an unhealthy customer's login
+Poisson can be 0), leaving a PIT aggregate undefined. The empty-window contract, identical offline
+and online (so the §3 parity test is meaningful): **count** features → `0`; **`days_since_last_login`
+recency** → the full window length `365` (the anchor's real `[0,365]` sentinel, also `VALID_RANGES`);
+**undefined means** (mean sentiment, mean session depth) → a fixed sentinel `0.0` **plus a companion
+`has_<family>` boolean** rather than a magic number (the presence flag, not the sentinel value,
+carries the "was silent" signal — itself health-correlated, so it is a real feature and must be
+frozen in `analysis_spec.json` before the confirmatory seed). The online store must emit the
+**byte-identical** sentinel for an absent key.
+
+### D6.7 — Timeline grounding: one UTC clock, one shared anchor `t0` (Codex completeness round)
+
+The frozen spec defines only relative weeks; the generator grounds them once. **`t0` is a single
+shared UTC snapshot instant** for the whole anchor cohort (`ANCHOR_T0`, pinned in code); each
+customer's 52-week window is `[t0 − 364d, t0)` and `event_ts` are real `datetime64[ns]` (tz-naive
+UTC) timestamps stored that way in Parquet and replayed byte-for-byte into Redpanda. One clock + one
+unit means the offline DuckDB `(t0 − Wd, t0]` window and the online Quix event-time window bucket on
+the *identical* representation — no float-days-vs-datetime or tz/DST skew (a parity + PIT concern).
+The `(customer_id, t0)` cohort driver is one row per anchor customer at the shared `t0`.
+
+### D6.8 — Full 52-week emission for every customer; control-validity RNG isolation (Codex completeness round)
+
+**No tenure-gating.** The generator simulates the full fixed 52-week latent + event window for
+**every** customer regardless of `account_age_days`. Gating emission by tenure (a truly-static,
+hazard-entering attribute) would make event counts and the recency window a direct function of a
+static attribute → event features would recover signal partly by **re-encoding `account_age`**
+rather than by proxying `h(t0)` — failure mode B (tautological/static leakage inflating
+`synthetic_static_plus_event_auc`). Decoupling event-history length from static tenure is a
+**ceiling-invariance guard**; any tenure realism would require a re-lock, never silent Phase-1 code.
+**Control-validity RNG isolation.** The null-stream control regenerates events with all health
+slopes `b` zeroed while keeping static + health + label fixed (D5.8). Zeroing `b` changes `λ` and so
+consumes a different amount of event-stream RNG; if the health path or label shared a stream with
+the event draws, redrawing events would shift `h(t0)`/`y` and move the control baseline, silently
+masking event-side leakage. `rng.py` already spawns **independent** child streams per concern
+(`latent`, `label`, and one per event family), drawn independently, so both negative controls hold
+static + health + label fixed while only the event families regenerate — now a named invariant,
+pinned by a test.
+
+---
+
+## D7 — Recovery-feasibility re-lock (proxy quality strengthened; ceiling untouched) (2026-07-02)
+
+**This is the conspicuous, reviewed, results-free Stage-1 re-lock that D5.9 pre-committed to.** It
+strengthens the frozen world's **proxy quality** so the injected health signal is genuinely
+recoverable by a leak-free pipeline; it changes **nothing** about the ceiling or the success
+criterion. Executed during exploratory Phase 1, **before** the Stage-2 analysis freeze and before
+the beacon-derived confirmatory seed is ever drawn.
+
+### The finding (why a re-lock, per D5.9)
+
+Phase-1 exploration (built on the frozen kernels, PIT features, and the group-aware leak-free model)
+showed that with the **original** a-priori event params (`κ=0.2`; login ~4/wk, `b_L=0.4`; etc.) a
+correct, leak-free instrument recovers only **~38–48%** of the oracle headroom
+(`synthetic_static_plus_event_auc − synthetic_static_auc` vs `oracle − static`), **robustly below the
+pre-registered `f = 0.5` floor** across many exploratory seeds and across feature representations
+(multi-window counts, log-transforms) and model families (LogReg, HistGradientBoosting). This is
+exactly the D5.9 "recovery feasibility" residual risk materializing — a leak-free pipeline could not
+clear the pre-registered floor, which would force an **uninformative null** (was the pipeline wrong,
+or was the signal simply not recoverable?).
+
+**Diagnosis (what the ~45% cap is).** Two structural facts, both quantified:
+1. `h(t0) = h_52` carries a fresh last-week innovation `σ·ε_51` (~36% of its variance at `κ=0.2`)
+   that drives **no** events (events observe `h_0..h_51`). A **clairvoyant** estimator that knows the
+   full health path exactly therefore tops out at ~**65%** of the oracle headroom, not 100%.
+2. Realistic Poisson-noise-limited event aggregates fall a further ~20 points short of the
+   clairvoyant, capping realistic recovery at ~45% — under the 50% floor.
+
+So the floor was **structurally near-unachievable** under the original proxy params: even a perfect
+observer left too little for a noisy pipeline to clear 50% with the paired-bootstrap lower bound.
+
+### The decision — strengthen the two *proxy-quality* knobs (both ceiling-neutral)
+
+- **`κ`: 0.2 → 0.05** (weekly mean-reversion; `σ` re-derived to `σ0·√(1−(1−κ)²) ≈ 0.312`). **`κ` is
+  ceiling-neutral:** the stationary `h(t0) ~ N(μ(x), σ0²)` distribution the oracle/static AUCs depend
+  on does **not** involve `κ` (the tuning MC and the non-degeneracy test both evaluate at
+  stationarity). `κ` governs only how *predictable* `h_52` is from the observed weeks — i.e. how much
+  of the frozen signal leaves an observable event trace. A slower reversion (~20-week memory) lifts
+  the clairvoyant recovery ceiling above the floor. A ~20-week health memory is if anything *more*
+  realistic than 5 weeks for underlying customer engagement/satisfaction.
+- **Event coefficients strengthened** (the D5.5-designated a-priori proxy knobs): higher baseline
+  rates + steeper health slopes (login ~6/wk `b_L=0.7`; session-depth `b_P=1.8`; order ~1/wk
+  `b_O=0.5`; payment ~7% `b_F=−1.0`; support ~0.4/wk `b_S=−0.7`; sentiment `b_T=0.85`; downgrade ~3%
+  `b_D=−0.8`). Event coefficients **never** affect the ceiling (it depends solely on
+  latent+hazard+static — D5.9); they set only how strongly/cleanly events reveal `h`.
+
+### Why this is not gaming (the honesty line, explicitly)
+
+- **The success criterion is untouched.** `f = 0.5` stays pre-registered. I did **not** lower the bar
+  to meet the result.
+- **The ceiling is untouched — verified, not asserted.** Re-running the tuning yields the identical
+  regime: base `0.478`, `static_auc 0.639`, `oracle_auc 0.803`, `recoverable_lift 0.164`,
+  `Var(μ):Var(stoch h) = 1:13.17` — bit-for-bit the pre-re-lock values (α0, α_h, α_stat, s_μ, σ0 are
+  κ-independent stationary quantities and were not touched). The *difficulty* of the prediction
+  problem is unchanged.
+- **What changed is the world's observability**, a modelling property explicitly in the "proxy
+  quality" category D5.5/D5.9 set aside precisely to "de-risk recovery." Making an injected signal
+  *recoverable* is the whole point of a positive control; an unrecoverable signal validates nothing.
+- **Margin is against seed variance, not against the outcome.** The confirmatory seed is
+  beacon-derived and unknowable; I calibrated proxy quality so a *typical* seed clears comfortably
+  (well-powered experiment), then froze — I cannot and did not tune toward the specific confirmatory
+  draw. A single-shot miss is still an honestly recorded null (D3 stopping rule).
+- **Conspicuous + results-free.** No `reports/instrument_validation/**` exists yet, so Layer-2 is not
+  tripped; this is a clean Stage-1 world re-lock recorded here and re-hashed into `simulator.lock.json`.
+
+### Verification (exploratory, on held-out-from-confirmatory seeds)
+
+Regime preserved (above). **Both negative controls pass** on the re-locked world: null-stream event
+lift `≈ −0.009 ≈ 0`; label-shuffle `static+event AUC ≈ 0.517 ≈ 0.5`. **All 10 exploratory seeds
+clear both the ROC-AUC and PR-AUC paired-bootstrap lower bounds** above the `max(MDE, 0.5·RL) ≈ 0.082`
+floor (worst-seed ROC lower bound `0.088`, most `0.11–0.18`) — a well-powered positive control.
+
+### Mechanics & scope
+
+`tuning.py` (`KAPPA`, `EVENT_PARAMS`) → `python -m churn.simulator.tuning` regenerated
+`simulator.params.json` + `reports/simulator_tuning.json`; the golden-vector baseline tests
+(`test_simulator_params.py`, `test_simulator_events.py`) + the spec prose (`docs/simulator_spec.md`
+§3, §5) were updated to the new baselines; the offline feature set (`featurestore/offline.py`) was
+aligned to the validated multi-window readout set; `simulator.lock.json` was regenerated
+(`--write`). **D7 amends** D5.1/D5.6 (`κ`), D5.5/D5.9 (event coefficients) — the D5.x prose is the
+historical record; the frozen numbers now live in the re-locked `simulator.params.json`.

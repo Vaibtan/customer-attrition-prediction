@@ -98,14 +98,14 @@ def test_hazard_prob_decreases_in_health_and_quality():
 def test_exp_link_is_log_linear_rate():
     # exp(0.5 + 0.25*2) = exp(1.0)
     assert K.exp_link(h=2.0, a=0.5, b=0.25) == pytest.approx(math.e)
-    # exp(ln(4) + 0.4*0) = 4.0  (login baseline at h=0)
+    # exp(ln(4) + 0.4*0) = 4.0  (generic exp-link check: exp_link(0, ln(r), b) == r)
     assert K.exp_link(h=0.0, a=math.log(4.0), b=0.4) == pytest.approx(4.0)
 
 
 def test_logistic_link_is_logit_probability():
     # sigmoid(0 + (-0.5)*1) = sigmoid(-0.5)
     assert K.logistic_link(h=1.0, a=0.0, b=-0.5) == pytest.approx(0.3775406687981454)
-    # sigmoid(ln(0.05/0.95)) = 0.05  (payment-failure baseline at h=0)
+    # sigmoid(ln(0.05/0.95)) = 0.05  (generic logit check: logistic_link(0, ln(p/(1-p)), b) == p)
     assert K.logistic_link(h=0.0, a=math.log(0.05 / 0.95), b=-0.7) == pytest.approx(0.05)
 
 
