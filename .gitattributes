@@ -1,0 +1,15 @@
+# The Stage-1 pre-registration lock (simulator.lock.json) hashes these frozen files with
+# CRLF/CR->LF normalization, but we also pin them to LF so the Windows dev box and Linux CI
+# agree and git shows no line-ending churn on the freeze.
+docs/simulator_spec.md          text eol=lf
+simulator.params.json           text eol=lf
+simulator.lock.json             text eol=lf
+src/churn/simulator/kernels.py  text eol=lf
+src/churn/simulator/params.py   text eol=lf
+src/churn/simulator/beacon.py   text eol=lf
+
+# Keep data + binary artifacts byte-exact (data/customer_data.csv is hashed raw by registry.py).
+data/** -text
+*.joblib binary
+*.png binary
+*.jpg binary

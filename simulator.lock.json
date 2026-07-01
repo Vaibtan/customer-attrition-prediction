@@ -1,0 +1,76 @@
+{
+  "lock_version": 1,
+  "stage": 1,
+  "description": "Stage-1 pre-registration lock (PHASE0_LOCK_DECISIONS.md D1-D5). Freezes the world (docs/simulator_spec.md + simulator.params.json) and the confirmatory-seed / floor-RNG beacon recipe. The analysis spec, analysis-code hash, and numeric floors are Stage 2.",
+  "git_sha_at_generation": "73db2a7",
+  "git_sha_note": "HEAD when the lock was written (typically the PARENT of the lock commit); informational provenance only -- NOT verified by check_lock and not dirty-checked.",
+  "hashed_files": [
+    "docs/simulator_spec.md",
+    "simulator.params.json",
+    "src/churn/simulator/kernels.py",
+    "src/churn/simulator/params.py",
+    "src/churn/simulator/beacon.py"
+  ],
+  "hash_normalization": "crlf-and-cr-to-lf-before-sha256 (text members only)",
+  "hashes": {
+    "docs/simulator_spec.md": "sha256:bd462bf6dd514636843215a3db2e9d4fa3f07203fdbfa30dd805f04996c32811",
+    "simulator.params.json": "sha256:78817718fdac43ca1227f3a64a3a3a85ca9cdf76cfdd69a7c3353dc78c079b51",
+    "src/churn/simulator/kernels.py": "sha256:eec5e0bfd9e90931d15de9c2cf7ce3c1e6e34eb118a906e83144e48b7e7157fb",
+    "src/churn/simulator/params.py": "sha256:0153c4bb8b353ae874b6840d6933e3fcb1909b25a3951ef6fc05ca6966652fd9",
+    "src/churn/simulator/beacon.py": "sha256:b8976f1d839ef28875ebf6fc4cd16be147efe193c98b01b9775463133ed09767"
+  },
+  "anchor": {
+    "path": "data/customer_data.csv",
+    "sha256": "2adca7201194d4ba69b6acc565f7db0a34e438ebce4a29837e29954a1b472504",
+    "note": "raw sha256 of the anchor (no normalization); verified by check_lock."
+  },
+  "beacon": {
+    "scheme": "drand-quicknet",
+    "beacon_id": "quicknet",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "public_key": "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a",
+    "genesis_time": 1692803367,
+    "period_seconds": 3,
+    "scheme_id": "bls-unchained-g1-rfc9380",
+    "group_hash": "f477d5c89f21a17c863a7f937c6a6d15859414d2be09cd448d4279af331c5d3e",
+    "delta_seconds": 3600,
+    "commit_skew_seconds": 900,
+    "round_rule": "R = first round with time >= (T_trusted + DELTA_SECONDS); time(r) = genesis + (r-1)*period",
+    "kdf": "seed_int = int.from_bytes(sha256(domain_tag + ':' + randomness_hex).digest(), 'big')",
+    "domain_tags": {
+      "confirmatory": "churn-confirmatory",
+      "confirmatory_bootstrap": "churn-confirmatory-bootstrap",
+      "oracle": "churn-oracle",
+      "mde": "churn-mde",
+      "floor_bootstrap": "churn-floor-bootstrap",
+      "control_label_shuffle": "churn-control-label-shuffle",
+      "control_null_stream": "churn-control-null-stream"
+    },
+    "t_trusted_rule": "protected-branch merge / CI first-seen time of the Stage-2 lock; NEVER the author's git commit/committer date. CI rejects backdated commits (skew window), requires R unemitted at first check, recomputes R, and rejects any other R or seed.",
+    "note": "Phase 0 commits this recipe only -- no live fetch, no confirmatory run until Stage 2 (D3/D4). A sealed-hash commitment is reserved for genuine multi-party custody and is NOT used here."
+  },
+  "controls": {
+    "label_shuffle": {
+      "method": "customer_level_permutation",
+      "target": "y"
+    },
+    "null_stream": {
+      "method": "zero_health_slopes",
+      "zeroed_b": [
+        "login_rate",
+        "session_depth",
+        "order_rate",
+        "payment_fail",
+        "support_rate",
+        "sentiment",
+        "downgrade"
+      ]
+    }
+  },
+  "stage2": {
+    "analysis_spec_sha256": null,
+    "analysis_code_sha256": null,
+    "numeric_floors": null,
+    "note": "Added at Stage 2 (end of Phase 1): analysis_spec.json hash + analysis-code hash + numeric floor values computed from the frozen pipeline after beacon round R emits."
+  }
+}

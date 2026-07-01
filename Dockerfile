@@ -8,7 +8,10 @@ COPY api ./api
 COPY data ./data
 COPY churn_prediction.py ./
 
-RUN uv sync --all-extras --no-dev
+# Only the serve extra (fastapi/uvicorn) is needed by the scoring API. Do NOT use --all-extras:
+# the platform extras (streaming/featurestore/orchestration/tracking/dashboard) are Phase 2-6
+# infra and would bloat this image + risk native-dep build failures the API never uses.
+RUN uv sync --extra serve --no-dev
 
 ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONUNBUFFERED=1

@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "description": "Frozen simulator world (PHASE0_LOCK_DECISIONS.md D5). Latent+hazard coefficients tuned by churn.simulator.tuning (scalar MC); event coefficients set a-priori. No confirmatory seed here -- only Stage-1 world constants.",
+  "latent": {
+    "process": "ar1_ou_weekly",
+    "weeks": 52,
+    "kappa": 0.2,
+    "sigma": 0.5999999999999999,
+    "sigma0": 1.0
+  },
+  "quality_index": {
+    "plan_score_map": {
+      "Free": 0.0,
+      "Basic": 1.0,
+      "Premium": 2.0,
+      "Enterprise": 3.0
+    },
+    "weights": {
+      "plan": 1.0,
+      "age": 0.25,
+      "spend": 0.2,
+      "aov": 0.15
+    },
+    "zero_weight_features": [
+      "region",
+      "device_type"
+    ],
+    "numeric_standardize": {
+      "account_age_days": {
+        "median": 746.5,
+        "mean": 753.355625,
+        "std": 427.4041549351847
+      },
+      "monthly_spend": {
+        "median": 56.195,
+        "mean": 242.73007807252984,
+        "std": 1489.174458026359
+      },
+      "avg_order_value": {
+        "median": 121.56,
+        "mean": 218.32571749921334,
+        "std": 837.8825966869944
+      }
+    },
+    "q_raw_standardize": {
+      "mean": 0.86,
+      "std": 1.0080006342361003
+    },
+    "s_mu": 0.2753257187670303
+  },
+  "hazard": {
+    "form": "sigmoid(alpha0 + alpha_h*h + alpha_stat*q)",
+    "alpha0": -0.1323366264696233,
+    "alpha_h": -1.2399424207396805,
+    "alpha_stat": -0.34138803821988406,
+    "label_window_days": 90
+  },
+  "events": {
+    "login_rate": {
+      "a": 1.3862943611198906,
+      "b": 0.4
+    },
+    "session_depth": {
+      "a": 8.0,
+      "b": 1.0,
+      "tau": 2.0
+    },
+    "order_rate": {
+      "a": -0.6931471805599453,
+      "b": 0.3
+    },
+    "payment_fail": {
+      "a": -2.9444389791664403,
+      "b": -0.7
+    },
+    "support_rate": {
+      "a": -1.8971199848858813,
+      "b": -0.4
+    },
+    "sentiment": {
+      "a": 0.0,
+      "b": 0.5,
+      "tau": 0.5
+    },
+    "downgrade": {
+      "a": -3.8918202981106265,
+      "b": -0.6
+    }
+  },
+  "temporal": {
+    "feature_window_weeks": 52,
+    "label_window_days": 90,
+    "latent_step": "weekly",
+    "row_key": [
+      "customer_id",
+      "t0"
+    ],
+    "anchor_rows_per_customer": 1
+  },
+  "population": {
+    "size": 50000,
+    "anchor_path": "data/customer_data.csv",
+    "anchor_n": 1600,
+    "fit_marginals": [
+      "region",
+      "device_type",
+      "subscription_plan",
+      "account_age_days",
+      "monthly_spend",
+      "avg_order_value"
+    ],
+    "fit_joints": [
+      [
+        "subscription_plan",
+        "monthly_spend"
+      ],
+      [
+        "subscription_plan",
+        "account_age_days"
+      ],
+      [
+        "subscription_plan",
+        "region"
+      ]
+    ],
+    "anchor_label_resimulated": true
+  },
+  "floor_design": {
+    "metrics": [
+      "roc_auc",
+      "pr_auc"
+    ],
+    "n_oracle": 200000,
+    "oracle_score": "analytic_bayes_hazard",
+    "mde_alpha_one_sided": 0.05,
+    "mde_power": 0.8,
+    "mde_z_multiplier": 2.49,
+    "mde_paired_mc_replicates": 2000,
+    "substantive_fraction_f": 0.5,
+    "bootstrap": "percentile_customer_level",
+    "floor_entrypoint": "churn.instrument.floors:compute_floors",
+    "rng_tags": [
+      "oracle",
+      "mde",
+      "floor_bootstrap",
+      "confirmatory_bootstrap"
+    ]
+  },
+  "controls": {
+    "label_shuffle": {
+      "method": "customer_level_permutation",
+      "target": "y"
+    },
+    "null_stream": {
+      "method": "zero_health_slopes",
+      "zeroed_b": [
+        "login_rate",
+        "session_depth",
+        "order_rate",
+        "payment_fail",
+        "support_rate",
+        "sentiment",
+        "downgrade"
+      ]
+    }
+  },
+  "tuning": {
+    "targets": {
+      "base_rate": 0.48,
+      "static_auc": 0.64,
+      "oracle_auc": 0.8
+    },
+    "dev_seed": 20260701,
+    "search_n": 60000,
+    "direct_static_fraction": 0.5,
+    "note": "dev_seed is NOT the confirmatory seed (beacon-derived at Stage 2, D3)."
+  }
+}

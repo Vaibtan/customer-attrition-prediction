@@ -3,7 +3,7 @@ name = "customer-attrition-prediction"
 version = "0.1.0"
 description = "Leak-free, reproducible customer churn prediction pipeline."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "pandas>=2.2",
     "numpy>=1.26",
@@ -17,6 +17,29 @@ dependencies = [
 serve = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+]
+# Platform extras (gated per phase; base install stays lean). Each earns its place
+# in a later phase (ENHANCEMENT_PLAN.md §2); nothing here is imported at Phase 0.
+# The streaming stack runs in Linux containers (Redpanda producer/consumer via
+# Docker Compose), so these are scoped to Linux -- quix-streams has no win32
+# wheels for newer Python, and the dev box never runs them bare-metal.
+streaming = [
+    "confluent-kafka>=2.5 ; sys_platform == 'linux'",   # Redpanda producer (Phase 2-3)
+    "quixstreams>=3.0 ; sys_platform == 'linux'",        # event-time windowed aggregation (Phase 2-3)
+]
+featurestore = [
+    "redis>=5.0",             # online store (Phase 2)
+    "duckdb>=1.1",            # offline store + ASOF PIT joins (Phase 1)
+]
+orchestration = [
+    "dagster>=1.9",           # asset-based DAGs, partitioned backfills (Phase 5)
+    "dagster-webserver>=1.9", # Dagster UI
+]
+tracking = [
+    "mlflow>=2.17",           # tracking + registry, gated to Phase 4
+]
+dashboard = [
+    "streamlit>=1.40",        # ML mission-control (Phase 6)
 ]
 
 [build-system]
