@@ -159,80 +159,48 @@ Before any blended claim, report **side-by-side** anchor vs synthetic: base rate
 marginals + key joints, missingness, outliers, static-only AUC, calibration, score
 distributions. These **scope** results to a domain; they are not a validity guarantee.
 
-### 4.6 Pre-registration — enforceable, staged lock (fixes T3 + R2 New #3; hardened v2)
+### 4.6 Pre-registration — enforceable, staged lock (fixes T3 + R2 New #3)
 
-The lock is **staged** so we never freeze a choice we have not yet made, yet nothing that
-determines the measured effect or the success criterion is left free once it is set. Full detail
-lives in **`PHASE0_LOCK_DECISIONS.md` (D1–D4)** — this section is the **authoritative summary the
-build follows**, not a pointer to a separate "working record" (closes review finding #1).
+The lock is **staged** so we never freeze a choice we have not yet made, yet nothing that determines
+the measured effect or the success criterion is left free once set. This is the design-level summary;
+the full mechanics, CI enforcement, and review provenance are the **decision record's D1–D4** (the
+single source of truth the build follows), with governance in **`docs/adr/0001`**.
 
 **Staged freeze.**
 
-- **Stage 1 (Phase 0)** freezes the **world + protocol + floor-*derivation*/oracle method**: the
-  latent process, event-emission/hazard functional forms, label rule, temporal contract,
-  population + anchor, control definitions, the evaluation protocol, **and the frozen oracle/floor
-  protocol (§4.4 / D4)** — including the **floor-computation design** (`N_oracle`, MDE replicate
-  counts, domain tags, the floor entrypoint). But **not** the floor RNG seeds and **not** the
-  numeric floor values: the floor RNG is **held out**, derived from the same beacon round `R` as the
-  confirmatory seed (domain-separated), so it is neither author-chosen (round-2 #3) nor knowable
-  before the analysis lock (round-3 #3).
-- **Stage 2 (end of Phase 1)** freezes the **analysis spec** (`analysis_spec.json`: feature
-  definitions, model + hyperparameters, preprocessing, selection metric, bootstrap
-  unit = **customer** + method, CI method) **plus an analysis-code hash**; then, **after beacon
-  round `R` emits**, executes the precommitted floor recipe (design from Stage 1, RNG from `R`) on
-  the now-frozen pipeline to **compute + lock the numeric floor values** — making *no* free choice.
-  CI re-derives the floors from `R` and verifies.
-- **Then** the single **confirmatory run** on the held-out confirmatory seed (revealed only after
-  Stage 2 — see below), under the **strict stopping rule**: a miss is a **recorded null**; any
-  re-run needs a fresh seed + a reviewed re-lock.
+- **Stage 1 (Phase 0, done):** the **world + protocol + floor-derivation/oracle method** — latent
+  process, event/hazard forms, label rule, temporal contract, population + anchor, control defs, the
+  evaluation protocol, and the floor-computation *design* (`N_oracle`, MDE replicate counts, domain
+  tags, floor entrypoint). **Not** the floor RNG seeds and **not** the numeric floors.
+- **Stage 2 (end of Phase 1):** the **analysis spec** (`analysis_spec.json`) + an **analysis-code
+  hash**; then, **after beacon round `R` emits**, run the precommitted floor recipe on the now-frozen
+  pipeline to **compute + lock the numeric floors** — no free choice; CI re-derives them from `R`.
+- **Then** the single **confirmatory run** on the held-out seed, under the strict stopping rule (D3):
+  a miss is a **recorded null**; any re-run needs a fresh seed + a reviewed re-lock.
 
-**Three distinct guards (never conflated).** (1) the **hash** proves the declared rules did not
-change; (2) **golden-vector conformance tests** prove the code computes the declared functional
-forms (e.g. a logistic link not silently a step function); (3) **controls + the leakage-sentinel
-suite (§4.7)** prove the pipeline is leak-free and recovers signal.
+**Three guards, never conflated (D1).** (1) the **hash** proves the declared rules did not change;
+(2) **golden-vector tests** prove the code computes the declared forms (a logistic link is not
+silently a step function); (3) **controls + the leakage-sentinel suite (§4.7)** argue leak-freeness
+and check signal recovery.
 
-**What is hashed in `simulator.lock.json`.** sha256 of `docs/simulator_spec.md` +
-`simulator.params.json` (every numeric constant + functional-form selectors + control definitions —
-**not the seed in the clear**), the git SHA, and **(Stage 2)** the `analysis_spec.json` hash + the
-**analysis-code hash** over the feature/model/eval/measurement modules + the locked numeric floors.
-The simulator and analysis read every number from the frozen JSON (single source of truth) so they
-physically cannot use an unfrozen value.
+**Seed & floor-RNG isolation — the guarantee (mechanics in D3/D4).** No seed is committed in the
+clear. The confirmatory seed **and** every pass/fail floor-RNG stream derive from a single **drand
+beacon round `R`** via domain-separated KDF tags, where `R = the first round at time ≥ T_trusted + Δ`
+and **`T_trusted` is a server-controlled timestamp (the protected-branch merge time), never the
+author's commit date**. So the values are **unknowable to anyone — including a solo author — until
+`R` emits, strictly after the analysis is frozen**, and cannot be author-shopped. CI reads
+`T_trusted` from the branch event, rejects backdated commit dates, requires `R` unemitted at first
+check, then recomputes and pins it. (Sealed-hash commitments bind only multi-party custody and are
+**not** used here.)
 
-**Confirmatory-seed isolation (no peeking).** The confirmatory seed is **not committed in the clear
-at Stage 1** — a local pre-Stage-2 run against a known seed could silently steer
-feature/model/floor choices. Stage 1 commits a **fully deterministic derivation recipe** (closes
-re-review #1): a **pinned public randomness beacon** (drand League-of-Entropy chain — chain hash +
-genesis + period recorded in the lock), a **canonical KDF** (`seed = SHA256("churn-confirmatory" ‖
-beacon_randomness(R))` → a NumPy `SeedSequence`), and an **exact round rule** — `R = the first
-beacon round whose time ≥ (T_trusted + Δ)`, where `Δ` is fixed at Stage 1 and **`T_trusted` is a
-server-controlled timestamp** (the protected-branch merge / CI first-seen time of the Stage-2 lock),
-**never the author's git commit date**. drand rounds are a deterministic function of time, so `R`
-(hence the seed) is **uniquely determined** by `T_trusted`. CI reads `T_trusted` from the
-protected-branch event (not `git`), **rejects** a Stage-2 commit whose author/committer date is
-outside a small skew window of `T_trusted` (no backdating), **requires `R` to be unemitted at first
-verification** (`T_trusted + Δ` strictly future), then recomputes `R`, re-derives the seed, and
-**rejects any other `R` or seed**. The value is unknowable — to anyone, **including a solo author**
-— until the beacon emits round `R`, strictly after the analysis is frozen. (A sealed-hash commitment is reserved for **genuine multi-party custody only**; it does
-not bind a solo author and is **not** used here — see D3.)
-
-**Two-layer CI guard + governance.**
-
-- **Layer 1 (consistency)** — a `lock` CI job recomputes every hash and fails on drift; the
-  measurement entrypoint asserts the same at runtime and embeds the lock into results.
-- **Layer 2 (same-commit separation)** — on PRs (`fetch-depth: 0`), fail if a change set touches
-  **both** the FROZEN set {`simulator_spec.md`, `simulator.params.json`, `simulator.lock.json`,
-  `analysis_spec.json`, **the ANALYSIS code modules**} and the RESULTS set
-  {`reports/instrument_validation/**`}.
-- **Governance** — protected branch + required review on any re-lock; no review-bypassing pushes.
-- **Tamper-evident results** — CI **regenerates the raw confirmatory predictions from scratch** in a
-  clean checkout, from the locked simulator spec/params + the beacon-derived confirmatory seed + the
-  hashed analysis code (bit-reproducible given the pinned dependency/threading), and compares them
-  **row-by-row (by content hash)** to the committed predictions; only then does it recompute the
-  summary (ΔROC/ΔPR-AUC CIs, verdict) and assert agreement. A fabricated prediction artifact — or a
-  summary hand-edited to "PASS" — fails, because the predictions must **reproduce the frozen
-  pipeline**, not merely be self-consistent with their own summary (closes re-review #2). CI applies
-  the **same regeneration to the locked numeric floors** (from `R` + the frozen pipeline), so the
-  **bar** cannot be hand-set either.
+**Enforcement — two CI layers + governance (D2, ADR 0001).** Layer 1 (`lock`) recomputes every hash
+and fails on drift; the measurement entrypoint asserts it at runtime. Layer 2 (`lock-separation`, PR
+only, `fetch-depth: 0`) fails if one change set touches **both** the FROZEN set and the RESULTS set
+{`reports/instrument_validation/**`}. **Tamper-evident results:** CI regenerates both the raw
+confirmatory predictions **and** the numeric floors from scratch (locked spec/params + beacon seed +
+hashed analysis code) and compares row-by-row — so neither a fabricated prediction nor a hand-set bar
+can pass. **Governance** (branch protection + required review on any re-lock) is the ADR-0001 setting
+that makes the procedural guards binding.
 
 Changing the experiment requires a deliberate, conspicuous, reviewed, results-free re-lock commit.
 
@@ -341,14 +309,15 @@ tests/                      # extended; leakage-sentinel suite; coverage gate st
 
 Each phase ends **green** (tests + ruff pass; deliverable demonstrably works).
 
-- **Phase 0 — Scaffolding + Stage-1 lock.** Repo layout, pyproject extras, Compose skeleton, CI
-  scaffold; write **`docs/simulator_spec.md`** + **`simulator.params.json`**, generate
+- **Phase 0 — Scaffolding + Stage-1 lock — done (`6e9111b`).** Repo layout, pyproject extras, Compose
+  skeleton, CI scaffold; **`docs/simulator_spec.md`** + **`simulator.params.json`**,
   **`simulator.lock.json`** (Stage-1 hashes + the confirmatory-seed **commitment/recipe**, not the
-  seed value), add the **golden-vector conformance tests** and the **`check_lock`** script, and
-  wire the **Layer-1 hash guard + Layer-2 same-commit separation + branch protection (§4.6)**.
-  **Numeric floors and the analysis spec are Stage 2 (end of Phase 1), not now.** *Green:*
-  `docker compose config` validates; existing 46 tests pass; spec + params + lock + golden vectors
-  committed; Layer-1/Layer-2 guard + branch protection active.
+  seed value), the **golden-vector conformance tests** and the **`check_lock`** script, and the
+  **Layer-1 hash guard + Layer-2 same-commit separation (§4.6)**.
+  **Numeric floors and the analysis spec are Stage 2 (end of Phase 1), not now.** *Green (met):*
+  `docker compose config` validates; the suite passes (93 tests); spec + params + lock + golden
+  vectors committed; Layer-1/Layer-2 guards active. **Open:** `main` branch protection is a manual
+  GitHub setting (ADR 0001).
 
 - **Phase 1 — Instrument validation, offline (NO infra).** Latent-state simulator →
   event log → DuckDB PIT features → the **leakage-sentinel suite (§4.7)** → develop on
@@ -422,7 +391,8 @@ Each phase ends **green** (tests + ruff pass; deliverable demonstrably works).
 
 - [ ] `evaluate.py`: add a **paired PR-AUC bootstrap** (only ROC-AUC `bootstrap_auc_diff_ci` exists) — Phase 4.
 - [ ] `monitoring.py`: drift is **type-aware** — categorical uses PSI + chi-square/JSD, not KS (categorical KS is `NaN` today) — Phase 4.
-- [ ] `simulator.lock.json` + **golden-vector conformance tests** + the **two-layer CI guard** (Layer-1 hash consistency + Layer-2 same-commit separation over the ANALYSIS set) + branch protection + confirmatory-seed **commitment** (no seed in the clear) — Phase 0 (Stage 1); **analysis-code hash + numeric-floor lock + tamper-evident results** — end of Phase 1 (Stage 2).
+- [x] **Stage-1 lock (Phase 0, `6e9111b`):** `simulator.lock.json` + golden-vector conformance tests + the two-layer CI guard (Layer-1 hash consistency + Layer-2 same-commit separation) + confirmatory-seed **commitment** (no seed in the clear). *Open:* `main` branch protection (manual — ADR 0001).
+- [ ] **Stage-2 lock (end of Phase 1):** analysis-code hash + numeric-floor lock + tamper-evident results + activate the Layer-2 ANALYSIS set.
 - [ ] **Leakage-sentinel suite** (§4.7), incl. group-aware split by `customer_id` — Phase 1.
 - [ ] Three named baselines emitted as distinct metrics (`real_static_reference_auc`, `synthetic_static_auc`, `synthetic_static_plus_event_auc`) — Phase 1.
 - [ ] CBPE: document assumptions + failure criteria; validate against known regimes — Phase 4.

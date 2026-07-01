@@ -1,24 +1,27 @@
-# Phase 0 — Lock & Pre-registration Decisions (v2.2, adds D5 frozen functional forms)
+# Decision Record — Churn Production Platform
 
-> The Phase 0 lock decisions, to be folded into `docs/simulator_spec.md`, the analysis spec,
-> `simulator.lock.json`, and the CI guard. **`ENHANCEMENT_PLAN.md` §4.6 now mirrors D1–D4
-> authoritatively** (no longer a mere "working record" the plan ignores). **Not yet committed.**
+> **The evolving record of grilled/consequential design forks and their resolutions.** D1–D5 are the
+> **Stage-1 pre-registration lock** (Phase 0); future forks (the Stage-2 analysis spec, streaming,
+> drift, promotion, …) append here as **D6+**. `ENHANCEMENT_PLAN.md` owns the design/architecture
+> narrative and `IMPLEMENTATION_CHECKLIST.md` tracks the build — both `§`/`D`-ref into this record
+> for the *why* and never restate it.
 >
-> **v2 superseded v1** after a Codex adversarial soundness review (verdict: v1 not sound to
-> freeze). The review's theme: v1 pinned the *world* tightly but left the *analysis side*
-> (features, model, evaluation, the floor's statistical rigor) under-frozen — the main
-> p-hacking surface. v2 closed that; all 11 findings folded in.
+> **Status.** D1–D5 are **committed and in force** (`6e9111b`), folded into `docs/simulator_spec.md`
+> + `simulator.params.json` + `simulator.lock.json` + the CI guard (the Stage-2 analysis spec is
+> still open). The **frozen** `simulator_spec.md` references this file *by name* — **do not rename
+> it** (a rename breaks the hashed pointer and forces a re-lock).
 >
-> **v2.1 folds in a 2nd Codex review's 3 findings:** **#1** plan-authority (ENHANCEMENT_PLAN.md
-> §4.6 rewritten to make D1–D4 the executable plan); **#12** confirmatory-seed isolation (the seed
-> is no longer committed in the clear at Stage 1 — see D3); **#13** a frozen oracle protocol so the
-> oracle ceiling cannot move the pass/fail floor (see D4).
->
-> **v2.2 (2026-07-01)** adds **D5 — the frozen simulator functional forms**, converged in an
-> interactive grilling session at the start of the Phase-0 build (7 branches, each resolved with a
-> recommendation the user accepted). D5 is the concrete specification that `docs/simulator_spec.md`,
-> `simulator.params.json`, and the golden-vector tests implement. It changes nothing in D1–D4 — it
-> *fills in* the "world" that D1–D4 freeze and guard.
+> **Provenance (how D1–D5 hardened).**
+> - **v1 → v2** — a Codex adversarial soundness review found v1 not sound to freeze: it pinned the
+>   *world* tightly but left the *analysis side* (features, model, evaluation, floor rigor)
+>   under-frozen — the main p-hacking surface. v2 closed that (all 11 findings folded in).
+> - **v2.1** — a 2nd Codex review's 3 findings: **#1** plan-authority (`ENHANCEMENT_PLAN.md` §4.6
+>   made the executable summary of D1–D4); **#12** confirmatory-seed isolation (no seed in the clear
+>   at Stage 1 — D3); **#13** a frozen oracle protocol so the oracle ceiling cannot move the floor (D4).
+> - **v2.2 (2026-07-01)** — **D5**, the frozen simulator functional forms, converged in an
+>   interactive grilling session (7 branches, each resolved with an accepted recommendation). D5 is
+>   the concrete spec that `simulator_spec.md`, `simulator.params.json`, and the golden vectors
+>   implement; it changes nothing in D1–D4 — it *fills in* the world they freeze and guard.
 
 ---
 
