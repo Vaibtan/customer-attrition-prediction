@@ -43,6 +43,60 @@ The main run writes PNG figures to `reports/figures/` and a registered model to
 
 ---
 
+## Production Platform (`enhancement` branch)
+
+The base exercise establishes the honest finding: on the real 1,600-row data the churn signal is
+**weak (~0.62 ROC-AUC)**. The `enhancement` branch builds a production MLOps platform *around* that
+finding — and, because the real data cannot support strong event-feature claims, it does so on a
+**pre-registered synthetic instrument**: a frozen simulator injects a latent-health signal and a
+leak-free pipeline must recover it, clearing floors fixed *before* the confirmatory seed is revealed.
+Everything below is a **synthetic-domain systems demonstration** — we never claim to *prove*
+real-world performance or leak-freeness.
+
+**Architecture.** Batch is the production decision (event log → DuckDB point-in-time features → score
+→ tiers). One scoped online path (FastAPI `/score/online` reads Redis online features) exists to
+demonstrate **train/serve consistency**: online features == offline PIT features, so the served score
+equals the batch score for the same `(customer, t0)`.
+
+**Five senior centerpieces** (see `ENHANCEMENT_PLAN.md` §7):
+1. A validated instrument with a real **leakage-sentinel suite** + an enforceable frozen spec.
+2. **Point-in-time correctness** — ASOF join + `max(feature_ts) ≤ t0 < min(label_ts)` + group-aware CV.
+3. **Train/serve parity under adversarial streams** — late/dup/reordered/boundary events yield
+   identical online (Redis) and offline (DuckDB) features, proven live through Redpanda + Quix.
+4. **Delayed-label estimation with stated limits** — CBPE, demonstrably *blind to concept drift*.
+5. **Promotion with statistical teeth** — paired ΔROC-AUC *and* ΔPR-AUC lower bounds past an MDE +
+   calibration/segment guardrails; incumbent wins ties; a better-by-noise challenger is not promoted.
+
+![Estimated vs true performance under drift](reports/figures/backtest_centerpiece.png)
+
+*The centerpiece backtest: as concept drift rotates the decision boundary, true ROC-AUC (labels)
+decays while CBPE stays optimistic — blind by construction — until a delayed-label monitor triggers a
+retrain that recovers performance.* Regenerate with `uv run python -m churn.backtest.plots`.
+
+**Run it.**
+
+```bash
+# Fast tier (host, no infra): unit + in-process parity + lifecycle logic
+uv run pytest -q
+
+# Real-infra tier (Docker): parity/serving/lifecycle vs LIVE Redpanda + Redis + MLflow
+docker compose --profile test run --rm test-runner        # pytest -m integration
+
+# The platform stack (opt-in profiles)
+docker compose --profile streaming up -d      # Redpanda + producer + Quix consumer + Redis
+docker compose --profile serve up -d          # FastAPI /score (+ /metrics)
+docker compose --profile tracking up -d       # MLflow tracking + registry (champion/challenger)
+docker compose --profile observability up -d  # Prometheus + Grafana (ops dashboards)
+docker compose --profile dashboard up -d      # Streamlit ML mission-control  (:8501)
+```
+
+**Where to read more:** `ENHANCEMENT_PLAN.md` (design + architecture), `IMPLEMENTATION_CHECKLIST.md`
+(phase-ordered *what*), `PHASE0_LOCK_DECISIONS.md` (decision record D1–D8), `docs/adr/` (governance +
+platform ADRs). The pipeline stays leak-free by argument from the **sentinel suite**, never claimed
+as proven on real data.
+
+---
+
 ## Background
 
 An e-commerce company is experiencing higher-than-expected customer attrition. The growth team wants to proactively identify customers who are likely to churn so that retention campaigns can be targeted effectively.

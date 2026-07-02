@@ -206,14 +206,17 @@ build and their configs are valid + tested; live `docker compose up` smoke is th
 
 ---
 
-## Phase 7 — Docs, CI, polish
+## Phase 7 — Docs, CI, polish — **DONE**
 
-- [ ] Rewrite README/docs into the single production story — scoped, non-overclaiming language.
-- [ ] ADRs in `docs/adr/`.
-- [ ] Extend CI for the full stack.
-- [ ] Final full-stack `docker compose up` smoke.
+- [x] README rewritten with the production-platform story — scoped, non-overclaiming ("synthetic
+      systems demo", never "prove" real leak-freeness) + the centerpiece chart + how to run.
+- [x] ADRs in `docs/adr/` (0002 real-infra tests, 0003 online serving/parity, 0004 promotion).
+- [x] CI extended: `integration` job (live Redpanda+Redis+MLflow via the test-runner), full-stack
+      `compose-smoke` (all-profile config valid + core stack health), `/metrics` API smoke.
+- [x] Full-stack `docker compose up` smoke verified locally (broker/store/observability healthy).
 
-**GREEN:** whole stack up · all gates pass.
+**GREEN (met):** stack profiles come up; host + real-infra suites green; ruff clean; CI runs the
+real-infra tier.
 
 ---
 

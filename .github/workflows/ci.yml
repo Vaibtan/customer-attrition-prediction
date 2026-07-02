@@ -151,6 +151,8 @@ jobs:
             -d '{"customer_id":"ci-1","region":"North","device_type":"Mobile","subscription_plan":"Free","account_age_days":30,"monthly_spend":12.5,"num_orders_last_90d":0,"avg_order_value":25.0,"support_tickets_raised":1,"days_since_last_login":40,"pages_per_session":2.0}' \
             | tee /tmp/score.json
           grep -q '"churn_probability"' /tmp/score.json || { echo "/score did not return a probability"; docker stop churn-api; exit 1; }
+          curl -fsS http://localhost:8000/metrics | grep -q 'churn_http_requests_total' \
+            || { echo "/metrics did not expose Prometheus metrics"; docker stop churn-api; exit 1; }
           docker stop churn-api
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -165,6 +167,56 @@ jobs:
           IMAGE=ghcr.io/${{ github.repository }}/churn-scoring:${{ github.sha }}
           docker tag churn-scoring:ci "$IMAGE"
           docker push "$IMAGE"
+
+  # Real-infra integration tests: the platform's train/serve + lifecycle guarantees proven against
+  # LIVE Redpanda + Redis + MLflow in the Dockerised test-runner (no mocked infra). This is the
+  # canonical guarantee; the `test` job's `-m "not integration"` run stays fast + infra-free.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images (test-runner + MLflow server)
+        run: |
+          docker compose --profile test build test-runner
+          docker compose --profile tracking build mlflow
+      - name: Run integration tests against live Redpanda + Redis + MLflow
+        run: |
+          docker compose --profile test run --rm test-runner \
+            pytest -m integration -p no:cacheprovider -q
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose --profile test --profile tracking logs --tail 200
+      - name: Tear down
+        if: always()
+        run: docker compose --profile test --profile tracking down -v
+
+  # Full-stack smoke: the whole compose stack (serve + streaming + observability) config-validates
+  # and the core profiles come up. Extends the API smoke in `docker`.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config validates (all profiles)
+        run: |
+          docker compose --profile streaming --profile serve --profile featurestore \
+            --profile observability --profile dashboard --profile tracking --profile test config >/dev/null
+          echo "compose config valid across all profiles"
+      - name: Bring up observability + broker/store, check health
+        run: |
+          docker compose --profile observability --profile featurestore --profile streaming \
+            up -d prometheus grafana redis redpanda
+          ok=0
+          for _ in $(seq 1 40); do
+            rp=$(docker inspect -f '{{.State.Health.Status}}' churn-platform-redpanda-1 2>/dev/null || echo none)
+            rd=$(docker inspect -f '{{.State.Health.Status}}' churn-platform-redis-1 2>/dev/null || echo none)
+            if [ "$rp" = healthy ] && [ "$rd" = healthy ]; then ok=1; break; fi
+            sleep 3
+          done
+          curl -fsS http://localhost:9090/-/ready >/dev/null && echo "prometheus ready"
+          [ "$ok" = 1 ] || { echo "broker/store not healthy"; docker compose logs --tail 100; exit 1; }
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
 
   deploy-placeholder:
     runs-on: ubuntu-latest
