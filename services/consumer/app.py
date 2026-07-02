@@ -45,14 +45,19 @@ def run_consumer(
     t0: pd.Timestamp,
     online_store: OnlineStore,
     timeout: float = 10.0,
+    count: int = 0,
+    commit_every: int = 0,
     state_dir: str | None = None,
     auto_offset_reset: str = "earliest",
 ) -> int:
     """Consume ``topic`` and write each customer's online vector to ``online_store``.
 
-    ``timeout`` bounds the run: it stops once no new message arrives within that many seconds
-    (0 = run forever). Returns the number of events processed. Reuses the SAME reducer as the
-    offline PIT query, so what lands in Redis is the offline feature vector by construction.
+    The run is bounded by ``timeout`` (stop after this many seconds with no new message; 0 = run
+    forever) and/or ``count`` (stop after this many messages; 0 = unbounded) -- whichever hits
+    first. ``commit_every`` forces an offset commit every N messages (0 = interval-based). Returns
+    the number of events processed. Reuses the SAME reducer as the offline PIT query, so what lands
+    in Redis is the offline feature vector by construction; dedup-by-event_id makes reprocessing
+    (at-least-once redelivery / crash recovery) idempotent.
     """
     from quixstreams import Application
     from quixstreams.state import State
@@ -65,6 +70,7 @@ def run_consumer(
         auto_offset_reset=auto_offset_reset,
         state_dir=state_dir,
         use_changelog_topics=False,
+        commit_every=commit_every,
     )
     in_topic = app.topic(
         topic,
@@ -73,24 +79,31 @@ def run_consumer(
         timestamp_extractor=_ts_extractor,
     )
     sdf = app.dataframe(topic=in_topic)
+    t0_ns = int(t0.value)
     counter = {"n": 0}
 
     def update_and_write(event: dict, state: State) -> dict:
-        # Per-key (customer) state: the deduped event map {event_id: [ts_ns, type, value]}.
-        raw = state.get("events")
-        events = json.loads(raw) if raw else {}
-        events[str(event["event_id"])] = [
-            int(event["event_ts_ns"]),
-            str(event["event_type"]),
-            event.get("value"),
-        ]
-        state.set("events", json.dumps(events))
-        online_store.put(str(event["customer_id"]), AGG.feature_vector(events, t0))
+        # Count every consumed message; dedup by event_id via a per-key marker so at-least-once
+        # redelivery / crash-recovery reprocessing is idempotent (O(1) point lookups, no growing
+        # blob). New events fold into a fixed-size incremental aggregator -- O(1) per event.
         counter["n"] += 1
+        eid = str(event["event_id"])
+        if state.exists(f"s:{eid}"):
+            return event
+        state.set(f"s:{eid}", 1)
+        raw = state.get("agg")
+        agg = (
+            AGG.CustomerAggregator.from_state(json.loads(raw))
+            if raw
+            else AGG.CustomerAggregator(t0_ns=t0_ns)
+        )
+        agg.add(int(event["event_ts_ns"]), str(event["event_type"]), event.get("value"))
+        state.set("agg", json.dumps(agg.to_state()))
+        online_store.put(str(event["customer_id"]), agg.features())
         return event
 
     sdf = sdf.apply(update_and_write, stateful=True)
-    app.run(timeout=timeout)
+    app.run(timeout=timeout, count=count)
     return counter["n"]
 
 

@@ -19,6 +19,7 @@ implementation behind both the parity test and the deployed consumer.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -132,7 +133,12 @@ def compute_features(rows: list[EventRow], t0: pd.Timestamp) -> dict[str, float]
 
 
 def feature_vector(events_by_id: Mapping[str, EventRow], t0: pd.Timestamp) -> dict[str, float]:
-    """One customer's feature vector from a deduped event map at ``t0`` (the online reducer)."""
+    """One customer's feature vector from a deduped event map at ``t0`` (the recompute reducer).
+
+    This is the reference reducer: correct and obvious (recompute from the full deduped set), but
+    O(events) per call. The deployed consumer uses :class:`CustomerAggregator` (O(1) per event); a
+    parity test pins the two equal, so the fast path inherits this one's correctness.
+    """
     t0 = pd.Timestamp(t0)
     rows = [
         (pd.Timestamp(ts), typ, _as_float(val))
@@ -140,6 +146,112 @@ def feature_vector(events_by_id: Mapping[str, EventRow], t0: pd.Timestamp) -> di
         if pd.Timestamp(ts) <= t0
     ]
     return compute_features(rows, t0)
+
+
+_NS_PER_DAY = 86_400_000_000_000  # 86_400 s * 1e9 ns; window bounds in event-time nanoseconds
+
+
+@dataclass
+class CustomerAggregator:
+    """Incremental, O(1)-per-event online aggregation for a FIXED query instant ``t0``.
+
+    Window membership is static for a fixed ``t0`` (an event is in the N-day window iff
+    ``event_ts > t0 - N days``), so each new event updates a constant set of running counters --
+    no per-event recompute over history. The state is a fixed-size, JSON-friendly blob
+    (``to_state``/``from_state``) suitable for a streaming consumer's keyed state. Dedup-by-event_id
+    is the caller's responsibility (the consumer skips already-seen ids), so ``add`` assumes each
+    event is applied once. ``features()`` reproduces :func:`compute_features` exactly.
+    """
+
+    t0_ns: int
+    login_14: int = 0
+    login_28: int = 0
+    login_90: int = 0
+    sd28_sum: float = 0.0
+    sd28_n: int = 0
+    sd90_sum: float = 0.0
+    sd90_n: int = 0
+    support_90: int = 0
+    sent90_sum: float = 0.0
+    sent90_n: int = 0
+    order_90: int = 0
+    pay_180: int = 0
+    down_365: int = 0
+    last_login_ns: int | None = None
+
+    def add(self, ts_ns: int, event_type: str, value: object) -> None:
+        t0 = self.t0_ns
+        if ts_ns > t0:  # strict PIT: the label window is invisible
+            return
+        if event_type == "login":
+            val = _as_float(value)
+            if ts_ns > t0 - 14 * _NS_PER_DAY:
+                self.login_14 += 1
+            if ts_ns > t0 - 28 * _NS_PER_DAY:
+                self.login_28 += 1
+                self.sd28_sum += val
+                self.sd28_n += 1
+            if ts_ns > t0 - 90 * _NS_PER_DAY:
+                self.login_90 += 1
+                self.sd90_sum += val
+                self.sd90_n += 1
+            if self.last_login_ns is None or ts_ns > self.last_login_ns:
+                self.last_login_ns = ts_ns
+        elif event_type == "support":
+            if ts_ns > t0 - 90 * _NS_PER_DAY:
+                self.support_90 += 1
+                self.sent90_sum += _as_float(value)
+                self.sent90_n += 1
+        elif event_type == "order":
+            if ts_ns > t0 - 90 * _NS_PER_DAY:
+                self.order_90 += 1
+        elif event_type == "payment_fail":
+            if ts_ns > t0 - 180 * _NS_PER_DAY:
+                self.pay_180 += 1
+        elif event_type == "downgrade":
+            if ts_ns > t0 - 365 * _NS_PER_DAY:
+                self.down_365 += 1
+
+    def features(self) -> dict[str, float]:
+        t0 = pd.Timestamp(self.t0_ns)
+        if self.last_login_ns is None:
+            recency = _SENTINEL
+        else:
+            elapsed = (t0 - pd.Timestamp(self.last_login_ns)).total_seconds() / 86_400.0
+            recency = min(_SENTINEL, elapsed)
+        return {
+            "days_since_last_login": float(recency),
+            "login_count_14d": float(self.login_14),
+            "login_count_28d": float(self.login_28),
+            "login_count_90d": float(self.login_90),
+            "login_trend_28_90": float(self.login_28 / (self.login_90 + 1.0)),
+            "mean_session_depth_28d": self.sd28_sum / self.sd28_n if self.sd28_n else 0.0,
+            "mean_session_depth_90d": self.sd90_sum / self.sd90_n if self.sd90_n else 0.0,
+            "has_login_90d": 1.0 if self.login_90 > 0 else 0.0,
+            "order_count_90d": float(self.order_90),
+            "support_count_90d": float(self.support_90),
+            "mean_sentiment_90d": self.sent90_sum / self.sent90_n if self.sent90_n else 0.0,
+            "has_support_90d": 1.0 if self.support_90 > 0 else 0.0,
+            "payment_fail_count_180d": float(self.pay_180),
+            "downgrade_count_365d": float(self.down_365),
+        }
+
+    def to_state(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_state(cls, raw: Mapping[str, object]) -> CustomerAggregator:
+        return cls(**raw)
+
+
+def feature_vector_incremental(
+    events_by_id: Mapping[str, EventRow], t0: pd.Timestamp
+) -> dict[str, float]:
+    """Fold a deduped event map through :class:`CustomerAggregator` (the fast-path reducer)."""
+    agg = CustomerAggregator(t0_ns=int(pd.Timestamp(t0).value))
+    for ts, typ, val in events_by_id.values():
+        agg.add(int(pd.Timestamp(ts).value), typ, val)
+    return agg.features()
 
 
 def _record_field(rec: object, name: str) -> object:
@@ -168,3 +280,32 @@ def aggregate_stream(
             _record_field(rec, "value"),
         )
     return {c: states[c].features(pd.Timestamp(t0)) for c, t0 in query_times.items()}
+
+
+def aggregate_stream_incremental(
+    events: object, query_times: Mapping[str, pd.Timestamp]
+) -> dict[str, dict[str, float]]:
+    """Same result as :func:`aggregate_stream`, via the O(1)-per-event incremental path.
+
+    Mirrors the deployed consumer exactly (dedup by ``event_id`` then fold through
+    :class:`CustomerAggregator`), so the parity test exercises the real online algorithm.
+    """
+    aggs = {
+        c: CustomerAggregator(t0_ns=int(pd.Timestamp(t0).value)) for c, t0 in query_times.items()
+    }
+    seen: dict[str, set[str]] = {c: set() for c in query_times}
+    records = events.itertuples(index=False) if isinstance(events, pd.DataFrame) else events
+    for rec in records:
+        cid = _record_field(rec, "customer_id")
+        if cid not in aggs:
+            continue
+        eid = _record_field(rec, "event_id")
+        if eid in seen[cid]:
+            continue
+        seen[cid].add(eid)
+        aggs[cid].add(
+            int(pd.Timestamp(_record_field(rec, "event_ts")).value),
+            _record_field(rec, "event_type"),
+            _record_field(rec, "value"),
+        )
+    return {c: aggs[c].features() for c in query_times}

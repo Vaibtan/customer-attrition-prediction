@@ -701,3 +701,38 @@ world change must be for a *different, disclosed* reason (e.g. a corrected bug i
 lift recovery. This bounds the loop at one and keeps the discriminating power of the instrument
 resting where it belongs — on the **negative controls + the leakage-sentinel suite** (untouched by
 D7 and passing), with the positive control scoped honestly as a *synthetic* recoverability check.
+
+## D8 — Platform serving & real-infra test forks (Phases 2-3) (2026-07-02)
+
+Implementation forks for the production platform. **None touch the frozen world, the lock, or the
+analysis code** (D7.1 holds): these are deployment/serving choices, not changes to what is measured.
+
+### D8.1 — One online reference implementation behind the parity guarantee
+
+The streaming online features are computed by a **single** Python reducer
+(`streaming.aggregate.feature_vector` + serialisable `CustomerState`) that BOTH the parity test and
+the deployed Quix consumer (`services/consumer/app.py`) import. The offline path (`featurestore.
+offline`, DuckDB SQL) is a *separate* implementation, so online/offline parity is a real cross-check
+(Python vs SQL), not a tautology. Rejected: re-expressing the 14-feature vector in Quix's window DSL
+(a second online impl that could silently diverge and is harder to prove byte-identical).
+
+### D8.2 — Real-infra test tier (no mocked infra)
+
+Parity/serving guarantees are proven through the ACTUAL deployment path against **live Redpanda +
+Redis** in a Dockerised `test-runner` (`infra/Dockerfile.test`, all extras), run via
+`docker compose --profile test run --rm test-runner` (`pytest -m integration`). The host tier keeps
+fast in-process parity + a `DictBackend` fake for unit speed, but the **canonical** guarantee is the
+container tier. Wire format: JSON with int64-ns event time (lossless) + NaN→null; keyed by
+`customer_id` so per-customer state is partition-local; dedup-by-`event_id` makes at-least-once
+redelivery / crash recovery idempotent.
+
+### D8.3 — Online scoring model (the `/score/online` path)
+
+The online model is the instrument's **`static_event`** pipeline (`serving.online_model`) fit on the
+synthetic population's simulated labels, with campaign-cost tier cutpoints. `/score/online` reads the
+event vector from Redis (by `customer_id`) and takes static attributes from the request. Because
+online event features == offline PIT features (parity), the served score **equals the offline batch
+score** for the same `(customer, t0)` — train/serve consistency at the score level. **Honesty
+scope:** this is a *synthetic-domain systems demonstration* of the online path, never a real-world
+performance claim (Sec 1). Static features come from the request (a CSM/UI already holds the profile),
+not a separate online profile store — the demo's scope needs no such store.

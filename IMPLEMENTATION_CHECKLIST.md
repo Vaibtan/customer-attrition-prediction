@@ -131,14 +131,26 @@ Redpanda+Redis passes · Dagster slice materialises + parity gate holds · host 
 
 ---
 
-## Phase 3 — Full streaming + serving
+## Phase 3 — Full streaming + serving — **DONE** (real infra, committed)
 
-- [ ] All event types through the streaming pipeline.
-- [ ] FastAPI `/score` reads Redis online features (scoped on-demand path, §3).
-- [ ] Systems demo (Redpanda's "earn it" bar, §4.4): replay guarantees, throughput target,
-      backpressure, failure recovery, late/out-of-order handling — with tests.
+> Serving model = decision **D8** (online static+event pipeline; synthetic-domain systems demo, not
+> an evidence claim). All Phase-3 guarantees proven against LIVE Redpanda+Redis in the `test-runner`
+> container (`tests/test_serving_integration.py`, `tests/test_streaming_systems.py`).
 
-**GREEN:** full-population parity holds · failure/replay tests pass.
+- [x] All event types through the streaming pipeline (the full 14-feature vector; large-scale
+      cohort replay through real Redpanda→Quix→Redis).
+- [x] FastAPI `/score/online` reads Redis online features + request statics (`api/online.py`);
+      returned probability == the offline batch score for `(customer, t0)` — score-level train/serve
+      consistency proven live (20 customers, 1e-9).
+- [x] Systems demo (Redpanda "earn it", §4.4): large-scale parity + **measured throughput floor**;
+      **idempotent replay** (fresh group reprocesses from offset 0 → identical online state);
+      **crash recovery** (stop mid-batch → restart same group/state → converges to offline);
+      late/out-of-order/duplicate handled by the parity core. `run_consumer` gained `count` +
+      `commit_every` for bounded/offset-controlled runs.
+- [ ] `online-api` compose service (deployment packaging) — deferred to Phase 7 full-stack smoke.
+
+**GREEN (met):** large-scale online/offline parity holds · replay + crash-recovery + throughput
+tests pass · `/score/online` == offline batch score, live.
 
 ---
 

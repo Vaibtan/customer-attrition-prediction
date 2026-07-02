@@ -32,12 +32,16 @@ def _ev(rows: list[dict]) -> pd.DataFrame:
 def _assert_parity(events: pd.DataFrame, ids: list[str], t0=T0):
     cohort = pd.DataFrame({"customer_id": ids, "t0": [t0] * len(ids)})
     offline = OFF.compute_pit_features(events, cohort).set_index("customer_id")
-    online = AGG.aggregate_stream(events, {c: t0 for c in ids})
+    # Both online reducers must equal offline: the recompute reference AND the O(1)-per-event
+    # incremental path the deployed consumer actually runs (SQL == recompute == incremental).
+    recompute = AGG.aggregate_stream(events, {c: t0 for c in ids})
+    incremental = AGG.aggregate_stream_incremental(events, {c: t0 for c in ids})
     for c in ids:
         off_row = offline.loc[c]
-        on_row = online[c]
         for col in OFF.FEATURE_COLUMNS:
-            assert on_row[col] == pytest.approx(float(off_row[col]), abs=1e-9), (c, col)
+            target = pytest.approx(float(off_row[col]), abs=1e-9)
+            assert recompute[c][col] == target, ("recompute", c, col)
+            assert incremental[c][col] == target, ("incremental", c, col)
 
 
 def test_parity_on_a_real_customer_stream():
@@ -151,3 +155,22 @@ def test_parity_for_empty_customer():
         ]
     )
     _assert_parity(events, ["A", "GHOST"])  # GHOST has no events -> both sides emit the sentinels
+
+
+def test_incremental_aggregator_state_round_trips():
+    # The consumer persists/reloads the aggregator as a JSON-friendly blob every event; a
+    # round-trip through to_state/from_state must not change the emitted vector.
+    agg = AGG.CustomerAggregator(t0_ns=int(T0.value))
+    for days, typ, val in [(3, "login", 6.0), (20, "login", 4.0), (10, "support", -0.4)]:
+        agg.add(int((T0 - pd.Timedelta(days=days)).value), typ, val)
+    restored = AGG.CustomerAggregator.from_state(agg.to_state())
+    assert restored.features() == agg.features()
+    # ... and it equals the recompute reducer on the same (deduped) events.
+    events = {
+        "A:login:0": (T0 - pd.Timedelta(days=3), "login", 6.0),
+        "A:login:1": (T0 - pd.Timedelta(days=20), "login", 4.0),
+        "A:sup:0": (T0 - pd.Timedelta(days=10), "support", -0.4),
+    }
+    recompute = AGG.feature_vector(events, T0)
+    for col in OFF.FEATURE_COLUMNS:
+        assert agg.features()[col] == pytest.approx(recompute[col], abs=1e-9)
