@@ -169,6 +169,41 @@ def bootstrap_auc_diff_ci(
     }
 
 
+def bootstrap_pr_auc_diff_ci(
+    y_true,
+    proba_a,
+    proba_b,
+    n_rounds: int = config.BOOTSTRAP_ROUNDS,
+    seed: int = config.SEED,
+    alpha: float = 0.05,
+) -> dict:
+    """Paired bootstrap CI for PR-AUC(a) - PR-AUC(b); a CI straddling 0 means a tie.
+
+    The PR-AUC counterpart to ``bootstrap_auc_diff_ci`` (average precision) -- required by the
+    promotion gate (Sec 4.8), which demands BOTH lower bounds clear the MDE. Same paired resamples
+    (each round scores both models on the identical indices) so the difference is properly paired.
+    """
+    y_true = np.asarray(y_true)
+    proba_a = np.asarray(proba_a, dtype="float64")
+    proba_b = np.asarray(proba_b, dtype="float64")
+    rng = np.random.default_rng(seed)
+    draws = rng.integers(0, len(y_true), size=(n_rounds, len(y_true)))
+    diffs = np.asarray(
+        [
+            average_precision_score(y_true[idx], proba_a[idx])
+            - average_precision_score(y_true[idx], proba_b[idx])
+            for idx in draws
+            if np.unique(y_true[idx]).size >= 2
+        ]
+    )
+    return {
+        "diff_mean": float(diffs.mean()),
+        "diff_lo": float(np.quantile(diffs, alpha / 2)),
+        "diff_hi": float(np.quantile(diffs, 1 - alpha / 2)),
+        "n_rounds": int(diffs.size),
+    }
+
+
 def threshold_sensitivity(y_val, val_proba, y_test, test_proba, scenarios) -> list[dict]:
     """Recompute t* (on validation) and report hold-out EV per economic scenario."""
     y_test = np.asarray(y_test)

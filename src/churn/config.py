@@ -73,3 +73,13 @@ SEED = 42
 TEST_SIZE = 0.2
 CV_FOLDS = 5
 CV_REPEATS = 3
+
+# --- Promotion policy (ENHANCEMENT_PLAN.md Sec 4.8) -------------------------------------------
+# A challenger is promoted only if BOTH paired lower bounds (ROC-AUC and PR-AUC) exceed the MDE
+# (not merely > 0), and every guardrail passes; the incumbent wins ties. EV is sensitivity only.
+PROMOTION_MDE = 0.005  # minimum detectable effect (AUC/PR-AUC points) the LB must clear
+PROMOTION_ALPHA = 0.05  # 95% paired-bootstrap CI
+PROMOTION_BRIER_TOLERANCE = 0.02  # challenger Brier may not exceed champion Brier by more than this
+PROMOTION_SEGMENT_TOLERANCE = 0.02  # per-segment ROC-AUC may not drop by more than this
+PROMOTION_SEGMENTS = ["subscription_plan", "region"]  # declared no-degradation segments
+PROMOTION_MIN_SEGMENT_ROWS = 50  # skip AUC on segments too small to estimate

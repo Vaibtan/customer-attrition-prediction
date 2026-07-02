@@ -51,6 +51,30 @@ def numeric_psi(reference: pd.Series, current: pd.Series, bins: int = 10) -> flo
     return psi_from_counts(ref_counts, cur_counts)
 
 
+def jensen_shannon_distance(reference: pd.Series, current: pd.Series) -> float:
+    """JS distance (in [0, 1]) between two categorical distributions.
+
+    The type-appropriate stat for categoricals: KS is undefined on unordered categories (the old
+    report showed ``NaN``). For a per-feature significance test use ``drift.detectors`` (chi-
+    square); this scalar keeps the legacy report's stat column meaningful for categoricals.
+    """
+    ref = reference.astype("object").where(reference.notna(), MISSING_TOKEN)
+    cur = current.astype("object").where(current.notna(), MISSING_TOKEN)
+    levels = sorted(set(ref.unique()) | set(cur.unique()), key=str)
+    p = ref.value_counts().reindex(levels, fill_value=0).to_numpy(dtype="float64")
+    q = cur.value_counts().reindex(levels, fill_value=0).to_numpy(dtype="float64")
+    p = p / p.sum() if p.sum() else p
+    q = q / q.sum() if q.sum() else q
+    m = 0.5 * (p + q)
+
+    def _kl(a, b):
+        mask = a > 0
+        return float(np.sum(a[mask] * np.log2(a[mask] / b[mask])))
+
+    jsd = 0.5 * _kl(p, m) + 0.5 * _kl(q, m)
+    return float(np.sqrt(max(jsd, 0.0)))
+
+
 def ks_statistic(reference: pd.Series, current: pd.Series) -> float:
     """Two-sample KS statistic without requiring scipy."""
     ref = np.sort(pd.to_numeric(reference, errors="coerce").dropna().to_numpy(dtype="float64"))
@@ -81,15 +105,21 @@ def data_quality_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def feature_drift(reference: pd.DataFrame, current: pd.DataFrame) -> pd.DataFrame:
+    """Per-feature drift with a TYPE-APPROPRIATE stat: KS for numerics, JSD for categoricals.
+
+    ``stat`` no longer reports ``NaN`` for categoricals (KS is undefined on categories); ``test``
+    records which statistic was used. For per-feature significance + a domain-classifier alarm, use
+    ``drift.detectors.detect_drift``.
+    """
     rows = []
     for col in config.RAW_FEATURE_COLUMNS:
         if col in config.BASE_NUMERIC:
             psi = numeric_psi(reference[col], current[col])
-            ks = ks_statistic(reference[col], current[col])
+            stat, test = ks_statistic(reference[col], current[col]), "KS"
         else:
             psi = categorical_psi(reference[col], current[col])
-            ks = np.nan
-        rows.append({"feature": col, "psi": psi, "ks": ks})
+            stat, test = jensen_shannon_distance(reference[col], current[col]), "JSD"
+        rows.append({"feature": col, "psi": psi, "stat": stat, "test": test})
     return pd.DataFrame(rows).sort_values("psi", ascending=False).reset_index(drop=True)
 
 
@@ -137,7 +167,7 @@ def build_drift_report(
         "",
         "## Feature Drift",
         "",
-        markdown_table(drift, ["feature", "psi", "ks"]),
+        markdown_table(drift, ["feature", "psi", "stat", "test"]),
     ]
 
     if model is not None:
