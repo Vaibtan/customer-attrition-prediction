@@ -87,6 +87,48 @@ jobs:
           fi
           echo "Layer-2 OK: FROZEN and RESULTS were not co-modified."
 
+  # Tamper-evident confirmatory reproduction (D2/D4). Regenerate the confirmatory predictions +
+  # floors from the RECORDED beacon randomness + the frozen pipeline, and assert the verdict, the
+  # numeric floors, and the paired lower bounds reproduce -- so neither a fabricated result nor a
+  # hand-set bar can pass. Exact predictions_sha256 match is within-platform (sklearn float drift
+  # across OS/BLAS may differ; the summary reproduction is the portable guarantee). No-op until the
+  # confirmatory artifact exists.
+  confirmatory-repro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.4"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install (featurestore extra -- duckdb + pyarrow)
+        run: uv sync --extra featurestore
+      - name: Regenerate from the recorded beacon + frozen pipeline, then compare
+        run: |
+          uv run python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          art = Path("reports/instrument_validation/confirmatory.json")
+          if not art.exists():
+              print("no confirmatory artifact yet; skipping"); sys.exit(0)
+          from churn.instrument import measure as M
+          committed = json.loads(art.read_text())
+          fresh = M.run_confirmatory(committed["beacon_randomness"],
+                                     out_dir=Path("/tmp/iv_repro"), kind="repro", n_rounds=2000)
+          assert fresh["verdict"]["pass"] == committed["verdict"]["pass"], "verdict drift"
+          tol = 5e-3
+          for m in ("roc_auc", "pr_auc"):
+              assert abs(fresh["floors"][m] - committed["floors"][m]) < tol, ("floor drift", m)
+          for k in ("delta_roc", "delta_pr"):
+              a, b = fresh["positive_control"][k]["diff_lo"], committed["positive_control"][k]["diff_lo"]
+              assert abs(a - b) < tol, ("delta lower-bound drift", k)
+          exact = fresh["predictions_sha256"] == committed["predictions_sha256"]
+          print(f"verdict + floors + delta-bounds reproduce (tol {tol}); predictions exact-match={exact}")
+          print("(exact predictions hash is within-platform; summary reproduction is the portable guarantee)")
+          PY
+
   docker:
     runs-on: ubuntu-latest
     needs: test
