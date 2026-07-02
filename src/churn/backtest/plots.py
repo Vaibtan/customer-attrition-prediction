@@ -75,9 +75,7 @@ def main(argv: list[str] | None = None) -> None:
     from churn.backtest import replay
 
     parser = argparse.ArgumentParser(description="Generate the backtest centerpiece chart.")
-    parser.add_argument(
-        "--out", default=str(config.FIGURES_DIR / "backtest_centerpiece.png")
-    )
+    parser.add_argument("--out", default=str(config.FIGURES_DIR / "backtest_centerpiece.png"))
     parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args(argv)
 
