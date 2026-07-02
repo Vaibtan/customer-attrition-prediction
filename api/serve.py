@@ -85,6 +85,9 @@ def create_app(run_dir: str | None = None) -> FastAPI:
         record = ScoredCustomer.from_frame(loaded.score(df))[0]
         return ScoreResponse(**asdict(record), model_run_id=loaded.run_id)
 
+    from api.metrics import add_metrics
+
+    add_metrics(app, "batch-scoring")
     return app
 
 

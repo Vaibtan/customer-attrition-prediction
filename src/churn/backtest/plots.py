@@ -22,14 +22,11 @@ _RETRAIN = "#219653"
 _DRIFT = "#f2c94c"
 
 
-def plot_backtest(
-    df: pd.DataFrame, out_path: str | Path, title: str = "Estimated vs true performance under drift"
-) -> Path:
-    """Render the backtest timeline to ``out_path`` (PNG). Returns the path."""
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+def build_figure(
+    df: pd.DataFrame, title: str = "Estimated vs true performance under drift"
+) -> plt.Figure:
+    """Build the centerpiece figure (for Streamlit ``st.pyplot`` or saving). Returns the Figure."""
     steps = df["step"]
-
     fig, ax = plt.subplots(figsize=(10, 5.5))
     drift = df.loc[df.get("angle", pd.Series(0, index=df.index)) > 0, "step"]
     if len(drift):
@@ -55,6 +52,16 @@ def plot_backtest(
     ax.set_title(title)
     ax.legend(loc="lower left", fontsize=9, framealpha=0.9)
     fig.tight_layout()
+    return fig
+
+
+def plot_backtest(
+    df: pd.DataFrame, out_path: str | Path, title: str = "Estimated vs true performance under drift"
+) -> Path:
+    """Render the backtest timeline to ``out_path`` (PNG). Returns the path."""
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig = build_figure(df, title=title)
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     return out_path

@@ -125,12 +125,17 @@ services:
       - prometheus
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
     profiles: ["observability"]
 
-  # --- ML mission-control (Phase 6): Streamlit. Placeholder image until built. ---
+  # --- ML mission-control (Phase 6): Streamlit ---
   dashboard:
-    image: python:3.11-slim
-    command: ["python", "-c", "print('streamlit ML mission-control -- Phase 6 placeholder')"]
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.dashboard
+    ports:
+      - "8501:8501"
     profiles: ["dashboard"]
 
   # --- Orchestration (Phase 5): Dagster. Placeholder image until built. ---

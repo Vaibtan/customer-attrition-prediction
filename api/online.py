@@ -87,6 +87,9 @@ def create_online_app(run_dir: str | None = None, redis_url: str | None = None) 
             model_run_id=str(run_dir) if run_dir else None,
         )
 
+    from api.metrics import add_metrics
+
+    add_metrics(app, "online-scoring")
     return app
 
 

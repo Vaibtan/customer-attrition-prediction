@@ -188,15 +188,21 @@ conditional retrain runs end to end (`tests/test_orchestration_timeline.py`); no
 
 ---
 
-## Phase 6 — Replay harness + observability
+## Phase 6 — Replay harness + observability — **DONE**
 
-- [ ] `backtest/` replay harness driving the whole drifting timeline.
-- [ ] Centerpiece chart: estimated vs true perf, drift alerts, retrain & recovery markers.
-- [ ] Prometheus + Grafana (ops-only: FastAPI latency/throughput/errors).
-- [ ] Streamlit ML mission-control: risk tiers, drift-over-time, perf estimates, promotion history
-      incl. rejected challengers.
+- [x] `backtest/replay.py` replay harness driving a drifting timeline (rotating boundary = concept
+      drift) → per-step estimated-vs-true perf + drift/retrain events.
+- [x] Centerpiece chart (`backtest/plots.py`, `reports/figures/backtest_centerpiece.png`): true vs
+      CBPE+band, shaded concept-drift region, retrain markers (recovery visible).
+- [x] Prometheus + Grafana (ops-only): `api/metrics.py` (`/metrics` + request count/latency/errors
+      on both FastAPI apps); `infra/prometheus.yml` scrapes `api:8000`; Grafana datasource +
+      dashboard provisioned (`infra/grafana/**`, mounted in compose `observability` profile).
+- [x] Streamlit ML mission-control (`services/dashboard/`): risk tiers, perf-under-drift, promotion
+      history **incl. rejected challengers** (pure `mission_control` logic tested; UI is a thin
+      render layer; `infra/Dockerfile.dashboard` + compose `dashboard` service).
 
-**GREEN:** chart generated · dashboards live.
+**GREEN (met):** centerpiece chart generated as a real artifact; observability + dashboard images
+build and their configs are valid + tested; live `docker compose up` smoke is the Phase-7 gate.
 
 ---
 

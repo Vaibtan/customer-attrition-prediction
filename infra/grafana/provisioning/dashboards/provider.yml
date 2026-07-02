@@ -1,0 +1,11 @@
+# Grafana dashboard provider: load JSON dashboards from disk on startup.
+apiVersion: 1
+providers:
+  - name: churn
+    orgId: 1
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

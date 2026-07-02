@@ -17,6 +17,7 @@ dependencies = [
 serve = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    "prometheus-client>=0.21",   # ops metrics: /metrics endpoint (Phase 6)
 ]
 # Platform extras (gated per phase; base install stays lean). Each earns its place
 # in a later phase (ENHANCEMENT_PLAN.md §2); nothing here is imported at Phase 0.
