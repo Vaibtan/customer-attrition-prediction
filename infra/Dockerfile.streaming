@@ -1,0 +1,21 @@
+# Streaming services image (producer + consumer). Lean: only the streaming + featurestore extras
+# (confluent-kafka, quixstreams, redis, duckdb) -- not the ML/orchestration/dashboard stacks the
+# online path never imports. Both the `producer` and `consumer` compose services run from this
+# image; each sets its own command.
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --extra streaming --extra featurestore
+
+COPY services ./services
+
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Default to the consumer; the compose `producer` service overrides `command`.
+CMD ["python", "-m", "services.consumer.app"]

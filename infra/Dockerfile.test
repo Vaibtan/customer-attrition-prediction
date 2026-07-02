@@ -1,0 +1,25 @@
+# Real-infra integration-test runner.
+#
+# A Linux image with ALL platform extras + the dev group installed (confluent-kafka, quixstreams,
+# dagster, mlflow, redis, duckdb, ...), so the `-m integration` suite runs against LIVE Docker
+# services (Redpanda, Redis, MLflow) rather than mocked infra. The venv lives OUTSIDE /app so the
+# whole repo can be bind-mounted read-only at run time (see compose.yaml `test-runner`) -- source
+# edits need no rebuild, and the dependency layer stays cached across them.
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1
+
+# Dependency layer: only the manifests + src (needed to build the churn wheel), so the slow sync
+# is cached and only re-runs when dependencies change -- not on every test-source edit.
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --all-extras --all-groups
+
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Default: the real-infra suite. `docker compose run --rm test-runner pytest ...` overrides freely.
+CMD ["pytest", "-m", "integration", "-p", "no:cacheprovider", "-v"]

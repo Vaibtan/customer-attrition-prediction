@@ -102,17 +102,32 @@ cohort diagnostics committed.
 
 ---
 
-## Phase 2 — Thin end-to-end vertical slice
+## Phase 2 — Thin end-to-end vertical slice — **DONE** (real infra, committed)
 
-- [ ] Pick ONE event type (e.g. login events).
-- [ ] `streaming/` producer (`confluent-kafka`) → Redpanda topic.
-- [ ] Quix Streams consumer: event-time windowed aggregation for that one feature.
-- [ ] Redis online store (`featurestore/` online half): latest feature vector keyed by `customer_id`.
-- [ ] Online/offline parity: Redis feature == offline DuckDB PIT feature for the same `(customer, t0)`.
-- [ ] Adversarial fixtures: late / duplicate / reordered / boundary events → identical features.
-- [ ] Minimal Dagster DAG wiring the slice.
+> **Real-infra decision (2026-07-02).** Parity is proven through the ACTUAL deployment path against
+> LIVE Redpanda + Redis (not mocks): a Dockerised `test-runner` (`infra/Dockerfile.test`, all
+> extras) runs `pytest -m integration` networked to the compose `redpanda`/`redis` services. The
+> host tier keeps the fast in-process parity + a `DictBackend` fake for unit speed; the container
+> tier is the canonical guarantee. Run: `docker compose --profile test run --rm test-runner`.
 
-**GREEN:** exhaustive online/offline parity on a bounded replay + adversarial fixtures pass.
+- [x] Full 14-feature vector across all event types (exceeds the "one event type" thin slice) — the
+      frozen `offline.FEATURE_COLUMNS` parity contract.
+- [x] `streaming/producer.py` (`confluent-kafka`) → Redpanda topic; pure wire codec (int64-ns event
+      time, NaN→null) host-tested, keyed by `customer_id`.
+- [x] Quix Streams consumer (`services/consumer/app.py`): per-customer stateful event-time
+      aggregation → the online reference reducer (`streaming/aggregate.feature_vector`).
+- [x] Redis online store (`featurestore/online.py`): latest vector keyed by `customer_id`.
+- [x] Online/offline parity: Redis feature == offline DuckDB PIT feature for `(customer, t0)` —
+      **proven live** in `tests/test_streaming_integration.py` (produce→consume→Redis→compare).
+- [x] Adversarial delivery: reordered + duplicated over the wire → byte-identical features (live);
+      late/post-t0/boundary/empty covered by the in-process parity suite.
+- [x] Minimal Dagster DAG (`orchestration/{assets,definitions}.py`): generate → offline PIT →
+      online → `parity_report` (fails the run on any diff); materialises in-process.
+- [x] `compose.yaml`: `topic-init` + `producer` + `consumer` services (streaming profile) +
+      `test-runner` (test profile); `docker compose config` valid.
+
+**GREEN (met):** live online/offline parity on a bounded adversarial replay through real
+Redpanda+Redis passes · Dagster slice materialises + parity gate holds · host suite + ruff clean.
 
 ---
 

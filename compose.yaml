@@ -28,7 +28,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    profiles: ["streaming"]
+    profiles: ["streaming", "test"]
 
   # --- Online feature store (Phase 2): Redis ---
   redis:
@@ -42,7 +42,56 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-    profiles: ["featurestore", "serve"]
+    profiles: ["featurestore", "serve", "test"]
+
+  # --- Topic bootstrap (Phase 2): create the events topic once, idempotently ---
+  topic-init:
+    image: redpandadata/redpanda:v24.2.7
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["rpk topic create customer-events -p 1 -r 1 --brokers redpanda:9092 || true"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["streaming"]
+
+  # --- Event producer (Phase 2-3): replay the event log to a Redpanda topic ---
+  producer:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.streaming
+    command: ["python", "-m", "churn.streaming.producer"]
+    environment:
+      REDPANDA_BROKER: "redpanda:9092"
+      EVENTS_TOPIC: "customer-events"
+      EVENTS_PARQUET: "data/stream/events.parquet"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    profiles: ["streaming"]
+
+  # --- Streaming feature consumer (Phase 2-3): Quix Streams -> Redis online store ---
+  consumer:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.streaming
+    command: ["python", "-m", "services.consumer.app"]
+    environment:
+      REDPANDA_BROKER: "redpanda:9092"
+      EVENTS_TOPIC: "customer-events"
+      CONSUMER_GROUP: "churn-streaming-v1"
+      REDIS_URL: "redis://redis:6379/0"
+      CHURN_AS_OF: "2025-01-01T00:00:00"
+      CHURN_STATE_DIR: "/tmp/quix-state"
+      CONSUMER_TIMEOUT: "0"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["streaming"]
 
   # --- On-demand scoring API (Phase 3): FastAPI /score, existing Dockerfile ---
   api:
@@ -89,6 +138,27 @@ services:
     image: python:3.11-slim
     command: ["python", "-c", "print('dagster orchestration -- Phase 5 placeholder')"]
     profiles: ["orchestration"]
+
+  # --- Real-infra integration tests (Phase 2+): pytest -m integration against LIVE Redpanda +
+  # Redis (no mocked infra). The whole repo is bind-mounted read-only so tests pick up live source
+  # without a rebuild; deps live in /opt/venv inside the image. Run one-shot with:
+  #   docker compose --profile test run --rm test-runner
+  test-runner:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.test
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      REDPANDA_BROKER: "redpanda:9092"
+      REDIS_URL: "redis://redis:6379/0"
+    volumes:
+      - .:/app:ro
+    working_dir: /app
+    profiles: ["test"]
 
 volumes:
   redpanda-data:

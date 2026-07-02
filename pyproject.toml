@@ -61,7 +61,10 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --strict-markers"
+markers = [
+    "integration: real-infra tests exercised against live Docker services (Redpanda, Redis, ...).",
+]
 
 [tool.ruff]
 line-length = 100
