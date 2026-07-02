@@ -176,12 +176,15 @@ passes · champion/challenger alias lifecycle runs against a live MLflow server.
 
 ---
 
-## Phase 5 — Orchestration depth
+## Phase 5 — Orchestration depth — **DONE**
 
-- [ ] Dagster: partitioned backfills over the timeline, schedules, drift-gated conditional-retrain
-      branch, retries, lineage.
+- [x] Dagster (`orchestration/timeline.py`): `pit_snapshot` **partitioned** over a weekly timeline
+      (per-`t0` PIT snapshots from a shared event log) + a `timeline_backfill` job + a weekly
+      `ScheduleDefinition`; `drift_gated_retrain` **conditional** branch (detect -> retrain + gate
+      only if drift fires; reuses the Phase-4 units) with a `RetryPolicy`; lineage via the asset graph.
 
-**GREEN:** a partitioned backfill + a drift-triggered conditional retrain run end to end.
+**GREEN (met):** a partitioned backfill materialises distinct per-`t0` snapshots and a drift-triggered
+conditional retrain runs end to end (`tests/test_orchestration_timeline.py`); no-drift skips retrain.
 
 ---
 
