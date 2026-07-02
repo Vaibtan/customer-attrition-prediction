@@ -1,0 +1,172 @@
+{
+  "kind": "confirmatory",
+  "beacon_randomness": "aca68692d92a6b69a22d29c2b3f3eb9bebde17c7ffff85d920ef12c239967a82",
+  "seeds": {
+    "confirmatory": "f10bba29aaeb81a12a376724d9703f570e576eb42327f7933304df24420abbd1",
+    "confirmatory_bootstrap": "dcb892766cf427e96a4dee39a4e37706a92e4014ee2b2096d7003b95dbddee99",
+    "cv_fold_seed": 3232619519,
+    "oracle": "e061617fc215c5000f5327755776b7f19666413b9b383e246f65d56740dc8fa8",
+    "mde": "7e03462ef9972a348dd5f72fb5172ef528cc123de42ec04d0e0366619dff3afa"
+  },
+  "baselines": {
+    "n": 1600,
+    "base_rate": 0.483125,
+    "real_static_reference_auc": 0.5786956222510027,
+    "real_static_reference_pr": 0.5479716226505187,
+    "synthetic_static_auc": 0.6293262168939308,
+    "synthetic_static_pr": 0.5877524506653266,
+    "synthetic_static_plus_event_auc": 0.7699082235859284,
+    "synthetic_static_plus_event_pr": 0.7503362110836574,
+    "oracle_auc": 0.8003804333373483
+  },
+  "positive_control": {
+    "delta_roc": {
+      "diff_mean": 0.1409063456954246,
+      "diff_lo": 0.11438354354795739,
+      "diff_hi": 0.166650152767797,
+      "n_rounds": 2000
+    },
+    "delta_pr": {
+      "diff_mean": 0.1612996964386759,
+      "diff_lo": 0.12854168003158872,
+      "diff_hi": 0.19367162238505314,
+      "n_rounds": 2000
+    }
+  },
+  "ceiling": {
+    "roc_auc": {
+      "oracle": 0.8017057518553958,
+      "static": 0.6395822659126046,
+      "recoverable_lift": 0.16212348594279125
+    },
+    "pr_auc": {
+      "oracle": 0.7805870768340196,
+      "static": 0.5843594719973153,
+      "recoverable_lift": 0.19622760483670432
+    }
+  },
+  "mde": {
+    "roc_auc": 0.03224582927203236,
+    "pr_auc": 0.04230607562850151
+  },
+  "floors": {
+    "roc_auc": 0.08106174297139562,
+    "pr_auc": 0.09811380241835216
+  },
+  "verdict": {
+    "roc_clears": true,
+    "pr_clears": true,
+    "pass": true
+  },
+  "predictions_sha256": "sha256:e01d34e938eba8b67eaba145e45a5e42f1f4466fb0ea053eff2b89eeb56e4601",
+  "provenance": {
+    "lock": {
+      "lock_version": 1,
+      "stage": 2,
+      "description": "Stage-1 pre-registration lock (PHASE0_LOCK_DECISIONS.md D1-D5). Freezes the world (docs/simulator_spec.md + simulator.params.json) and the confirmatory-seed / floor-RNG beacon recipe. The analysis spec, analysis-code hash, and numeric floors are Stage 2.",
+      "git_sha_at_generation": "b17ab5e",
+      "git_sha_note": "HEAD when the lock was written (typically the PARENT of the lock commit); informational provenance only -- NOT verified by check_lock and not dirty-checked.",
+      "hashed_files": [
+        "docs/simulator_spec.md",
+        "simulator.params.json",
+        "src/churn/simulator/kernels.py",
+        "src/churn/simulator/params.py",
+        "src/churn/simulator/beacon.py"
+      ],
+      "hash_normalization": "crlf-and-cr-to-lf-before-sha256 (text members only)",
+      "hashes": {
+        "docs/simulator_spec.md": "sha256:5397c32a79cc3e951ebedfe666491887986c00c97c2bc56e40a10c65435e415b",
+        "simulator.params.json": "sha256:8244aa5eda88d8000b2d2d996703a826f63300b408605be0bd3370b4ff4d6588",
+        "src/churn/simulator/kernels.py": "sha256:eec5e0bfd9e90931d15de9c2cf7ce3c1e6e34eb118a906e83144e48b7e7157fb",
+        "src/churn/simulator/params.py": "sha256:0153c4bb8b353ae874b6840d6933e3fcb1909b25a3951ef6fc05ca6966652fd9",
+        "src/churn/simulator/beacon.py": "sha256:b8976f1d839ef28875ebf6fc4cd16be147efe193c98b01b9775463133ed09767"
+      },
+      "anchor": {
+        "path": "data/customer_data.csv",
+        "sha256": "2adca7201194d4ba69b6acc565f7db0a34e438ebce4a29837e29954a1b472504",
+        "note": "raw sha256 of the anchor (no normalization); verified by check_lock."
+      },
+      "beacon": {
+        "scheme": "drand-quicknet",
+        "beacon_id": "quicknet",
+        "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+        "public_key": "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a",
+        "genesis_time": 1692803367,
+        "period_seconds": 3,
+        "scheme_id": "bls-unchained-g1-rfc9380",
+        "group_hash": "f477d5c89f21a17c863a7f937c6a6d15859414d2be09cd448d4279af331c5d3e",
+        "delta_seconds": 3600,
+        "commit_skew_seconds": 900,
+        "round_rule": "R = first round with time >= (T_trusted + DELTA_SECONDS); time(r) = genesis + (r-1)*period",
+        "kdf": "seed_int = int.from_bytes(sha256(domain_tag + ':' + randomness_hex).digest(), 'big')",
+        "domain_tags": {
+          "confirmatory": "churn-confirmatory",
+          "confirmatory_bootstrap": "churn-confirmatory-bootstrap",
+          "oracle": "churn-oracle",
+          "mde": "churn-mde",
+          "floor_bootstrap": "churn-floor-bootstrap",
+          "control_label_shuffle": "churn-control-label-shuffle",
+          "control_null_stream": "churn-control-null-stream"
+        },
+        "t_trusted_rule": "protected-branch merge / CI first-seen time of the Stage-2 lock; NEVER the author's git commit/committer date. CI rejects backdated commits (skew window), requires R unemitted at first check, recomputes R, and rejects any other R or seed.",
+        "note": "Phase 0 commits this recipe only -- no live fetch, no confirmatory run until Stage 2 (D3/D4). A sealed-hash commitment is reserved for genuine multi-party custody and is NOT used here."
+      },
+      "controls": {
+        "label_shuffle": {
+          "method": "customer_level_permutation",
+          "target": "y"
+        },
+        "null_stream": {
+          "method": "zero_health_slopes",
+          "zeroed_b": [
+            "login_rate",
+            "session_depth",
+            "order_rate",
+            "payment_fail",
+            "support_rate",
+            "sentiment",
+            "downgrade"
+          ]
+        }
+      },
+      "stage2": {
+        "analysis_spec_sha256": "sha256:2870bff6ae3cac1f1d5279f954ee709836afaf931e84c1b144f86d786c822b26",
+        "analysis_code_sha256": "sha256:abbb0b76b135ce6641701280716e990a679b9d5363de8c345b42f7c0c9750b36",
+        "analysis_modules": [
+          "src/churn/simulator/rng.py",
+          "src/churn/simulator/latent.py",
+          "src/churn/simulator/population.py",
+          "src/churn/simulator/events.py",
+          "src/churn/simulator/generate.py",
+          "src/churn/featurestore/offline.py",
+          "src/churn/instrument/model.py",
+          "src/churn/instrument/experiment.py",
+          "src/churn/instrument/floors.py",
+          "src/churn/instrument/measure.py"
+        ],
+        "analysis_code_hashes": {
+          "src/churn/simulator/rng.py": "sha256:cd0eb9badaf1d18fa34c74d619ab8608d5b60c7ba8996e0d1492ed33059ddd19",
+          "src/churn/simulator/latent.py": "sha256:4b3f3eec0af67eec663a7fae6a1abdeda019fafc68cf71b043b6307059e1817b",
+          "src/churn/simulator/population.py": "sha256:07ba8cd5604b29398aca9698ae83e0827836e51659dd3e75b410a37b2eb190fc",
+          "src/churn/simulator/events.py": "sha256:87093dc454dc2222e6792dbcc1de9ee6135522ec47db13c0632c164469076175",
+          "src/churn/simulator/generate.py": "sha256:b7d04378d8418592378007c1a6169632eb3df302abe2fae58fe14da97a24953b",
+          "src/churn/featurestore/offline.py": "sha256:8a58d15f504bed047149863df665580642b9f37338477e34cc1c249b2ed6ed68",
+          "src/churn/instrument/model.py": "sha256:5877f18d358124d7828101e52e05c770fc27f60bc02867b63c06af5677459f6c",
+          "src/churn/instrument/experiment.py": "sha256:a7a7d1fb22195f3101b908c153bcf5a3c4c696cb006a7eae8c697ae2a781806d",
+          "src/churn/instrument/floors.py": "sha256:93145ca376360d17054add07c4d8d541e99a501061451bb50e0f4fffb48dc936",
+          "src/churn/instrument/measure.py": "sha256:d0da31f3abba81eef996538bf072eef1f65dc892a2986d56fb3affaf0df2c71c"
+        },
+        "numeric_floors": null,
+        "note": "Stage-2 freeze: analysis_spec.json + ANALYSIS code hashed. numeric_floors computed from the frozen pipeline after beacon round R emits and re-derived by CI (D4)."
+      }
+    },
+    "analysis_code_sha256": "sha256:abbb0b76b135ce6641701280716e990a679b9d5363de8c345b42f7c0c9750b36",
+    "git_sha": "1138a9c",
+    "clean_tree": true,
+    "versions": {
+      "scikit_learn": "1.9.0",
+      "numpy": "2.4.6",
+      "pandas": "2.3.3"
+    }
+  }
+}

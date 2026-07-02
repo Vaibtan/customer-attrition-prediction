@@ -1,0 +1,12 @@
+{
+  "beacon_round": 30049507,
+  "randomness": "aca68692d92a6b69a22d29c2b3f3eb9bebde17c7ffff85d920ef12c239967a82",
+  "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+  "beacon_id": "quicknet",
+  "round_time_unix": 1782951885,
+  "round_time_utc": "2026-07-02T00:24:45Z",
+  "stage2_freeze_commit": "1138a9c",
+  "how_to_verify": "curl https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/30049507 and confirm the returned randomness equals the value above; then run churn.instrument.measure.run_confirmatory(<randomness>) and confirm predictions_sha256 / floors / verdict reproduce (within-platform).",
+  "procedure_note": "MANUAL confirmatory demonstration. The Stage-2 analysis spec + analysis-code hash were frozen and committed (1138a9c) BEFORE this beacon round was fetched, so the beacon-derived seed was unknowable at freeze time (a genuine held-out, single-shot draw per D3). This manual run used the first drand quicknet round emitted after the freeze commit (round time 2026-07-02T00:24:45Z), i.e. T_trusted + a few minutes -- NOT the canonical CI-enforced round R = first round at time >= T_trusted + Delta (Delta = 3600 s) keyed to the protected-branch merge clock. The Delta buffer + trusted-clock are the multi-party un-gameability hardening (D3); this real-beacon run demonstrates the full instrument end-to-end with an honestly held-out seed. The canonical confirmatory is the CI path.",
+  "stopping_rule": "PASS recorded (both ROC and PR paired lower bounds cleared both floors). Per D3 a miss would be a recorded null; per D7.1 no further recovery-feasibility re-lock is permitted -- there is no re-fetch and no re-tune."
+}
