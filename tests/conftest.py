@@ -69,6 +69,11 @@ def redis_url() -> str:
 
 
 @pytest.fixture
+def mlflow_uri() -> str:
+    return _env_or_skip("MLFLOW_TRACKING_URI")
+
+
+@pytest.fixture
 def redis_client(redis_url: str):
     import redis
 

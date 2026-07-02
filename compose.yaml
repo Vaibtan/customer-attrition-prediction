@@ -139,9 +139,25 @@ services:
     command: ["python", "-c", "print('dagster orchestration -- Phase 5 placeholder')"]
     profiles: ["orchestration"]
 
+  # --- MLflow tracking + model registry (Phase 4): champion/challenger aliases ---
+  mlflow:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    profiles: ["tracking", "test"]
+
   # --- Real-infra integration tests (Phase 2+): pytest -m integration against LIVE Redpanda +
-  # Redis (no mocked infra). The whole repo is bind-mounted read-only so tests pick up live source
-  # without a rebuild; deps live in /opt/venv inside the image. Run one-shot with:
+  # Redis + MLflow (no mocked infra). The whole repo is bind-mounted read-only so tests pick up
+  # live source without a rebuild; deps live in /opt/venv inside the image. Run one-shot with:
   #   docker compose --profile test run --rm test-runner
   test-runner:
     build:
@@ -152,9 +168,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mlflow:
+        condition: service_healthy
     environment:
       REDPANDA_BROKER: "redpanda:9092"
       REDIS_URL: "redis://redis:6379/0"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
     volumes:
       - .:/app:ro
     working_dir: /app
@@ -164,3 +183,4 @@ volumes:
   redpanda-data:
   redis-data:
   grafana-data:
+  mlflow-data:

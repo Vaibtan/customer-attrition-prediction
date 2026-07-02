@@ -154,22 +154,25 @@ tests pass · `/score/online` == offline batch score, live.
 
 ---
 
-## Phase 4 — Drift + delayed labels + retrain/promote + MLflow
+## Phase 4 — Drift + delayed labels + retrain/promote + MLflow — **DONE**
 
-- [ ] Drift simulation: covariate / prior / concept × sudden / gradual / recurring.
-- [ ] `drift/` type-aware detectors: numeric = PSI + KS ("both fire"); categorical = PSI +
-      chi-square/JSD (fix `monitoring.py` categorical KS = `NaN`); + domain-classifier alarm.
-- [ ] CBPE (~50 LOC): explicit assumptions + failure criteria; validate against known regimes;
-      demonstrate blind-under-concept-drift with error bands.
-- [ ] `lifecycle/` retrain loop.
-- [ ] `evaluate.py`: add paired PR-AUC bootstrap (only `bootstrap_auc_diff_ci` ROC-AUC exists today).
-- [ ] Promotion gate (§4.8): paired ΔROC-AUC and ΔPR-AUC lower bounds past an MDE at α=0.05;
-      guardrails (Brier within tolerance; no per-segment degradation on `subscription_plan`,
-      `region`); incumbent wins ties; EV across `COST_SCENARIOS` = sensitivity, not gate.
-- [ ] MLflow stood up (gated to here): `@champion`/`@challenger` aliases; Dagster logs to it.
+- [x] Drift simulation: covariate / prior / concept × sudden / gradual / recurring (`drift/simulate.py`).
+- [x] `drift/detectors.py` type-aware detectors: numeric = PSI + KS ("both fire"); categorical =
+      PSI + chi-square/Cramer's V (fixes `monitoring.py` categorical KS=`NaN` -> JS distance); +
+      domain-classifier covariate-shift alarm.
+- [x] CBPE (`drift/cbpe.py`): stated assumptions + failure criterion; validated on a stable regime;
+      **blind-under-concept-drift demonstrated** with a bootstrap band (realized AUC falls outside).
+- [x] `lifecycle/retrain.py` retrain-and-gate loop (retrain != promotion; incumbent kept on a miss).
+- [x] `evaluate.py`: added paired PR-AUC bootstrap (`bootstrap_pr_auc_diff_ci`).
+- [x] Promotion gate (§4.8, `lifecycle/promotion.py`): paired ΔROC-AUC **and** ΔPR-AUC LBs past an
+      MDE at α=0.05; guardrails (Brier tolerance; no per-segment degradation on `subscription_plan`/
+      `region`); incumbent wins ties; EV = sensitivity, not a gate.
+- [x] MLflow stood up (`lifecycle/mlflow_registry.py` + `infra/Dockerfile.mlflow` + compose
+      `mlflow` service): `@champion`/`@challenger` aliases; proven against a sqlite backend (host)
+      and a **live HTTP server** (container). Dagster wiring to MLflow -> Phase 5.
 
-**GREEN:** "better-by-noise → not promoted" test passes · "CBPE blind to concept drift" demo passes ·
-runs in MLflow with champion alias.
+**GREEN (met):** "better-by-noise -> not promoted" passes · "CBPE blind to concept drift" demo
+passes · champion/challenger alias lifecycle runs against a live MLflow server.
 
 ---
 

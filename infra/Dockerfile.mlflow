@@ -1,0 +1,16 @@
+# MLflow tracking + model registry server (Phase 4). sqlite backend store (aliases need a DB) +
+# a local artifact store proxied to clients (--serve-artifacts is the 3.x default), so a client
+# only needs MLFLOW_TRACKING_URI=http://mlflow:5000 to log models and resolve models:/<name>@alias.
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+RUN uv pip install --system "mlflow==3.14.0"
+RUN mkdir -p /mlflow/artifacts
+EXPOSE 5000
+
+# --allowed-hosts: MLflow 3.x rejects unknown Host headers (DNS-rebinding protection). Allow the
+# in-network name (mlflow:5000) + localhost for host-mapped access. Scoped, not "*".
+CMD ["mlflow", "server", \
+     "--host", "0.0.0.0", "--port", "5000", \
+     "--backend-store-uri", "sqlite:////mlflow/mlflow.db", \
+     "--artifacts-destination", "/mlflow/artifacts", \
+     "--allowed-hosts", "mlflow:*,localhost:*,127.0.0.1:*"]
