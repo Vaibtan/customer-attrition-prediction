@@ -2,7 +2,7 @@
 
 These complement the pure-formula golden vectors in test_simulator_kernels.py:
   * binding golden vectors evaluate each event family at its FROZEN (a, b) and check the
-    hand-computed baseline semantics (e.g. ~4 logins/wk, ~5% payment failure at h=0);
+    hand-computed baseline semantics (D7 re-lock: ~6 logins/wk, ~7% payment failure at h=0);
   * the non-degeneracy sanity test re-derives the regime from the frozen params via an
     INDEPENDENT MC path (params.quality_index + kernels.hazard_prob, fresh seed) and asserts
     the world has real recoverable headroom (oracle_auc >> static_auc). This is the Phase-0

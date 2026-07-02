@@ -73,8 +73,9 @@ jobs:
           echo "Changed files (since merge-base $merge_base):"; echo "$changed"
           # FROZEN set: the Stage-1 world + the ENFORCEMENT code itself (kernels/params/beacon/lock
           # + this workflow), so a results PR cannot weaken the checker/guard while staying clean.
-          # Stage 2 adds analysis_spec.json + the ANALYSIS code.
-          frozen=$(echo "$changed" | grep -E '^(docs/simulator_spec\.md|simulator\.params\.json|simulator\.lock\.json|src/churn/simulator/(kernels|params|beacon|lock)\.py|\.github/workflows/ci\.yml)$' || true)
+          # Stage 2 adds analysis_spec.json + the ANALYSIS code (generator + feature/model/eval/
+          # measure modules) -- the code that deterministically produces the confirmatory result.
+          frozen=$(echo "$changed" | grep -E '^(docs/simulator_spec\.md|simulator\.params\.json|simulator\.lock\.json|analysis_spec\.json|src/churn/simulator/(kernels|params|beacon|lock|rng|latent|population|events|generate)\.py|src/churn/featurestore/offline\.py|src/churn/instrument/(model|experiment|floors|measure)\.py|\.github/workflows/ci\.yml)$' || true)
           # RESULTS set: the confirmatory / instrument-validation artifacts (appear at Stage 2).
           results=$(echo "$changed" | grep -E '^reports/instrument_validation/' || true)
           if [ -n "$frozen" ] && [ -n "$results" ]; then

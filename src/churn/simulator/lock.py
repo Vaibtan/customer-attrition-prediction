@@ -43,6 +43,23 @@ HASHED_FILES = [
 ANCHOR_REL = "data/customer_data.csv"
 LOCK_VERSION = 1
 
+# Stage-2 ANALYSIS set (D1/D2): the analysis spec + every code module that deterministically
+# produces the confirmatory predictions/floors from (frozen params + beacon seed). Hashing these
+# binds the experiment: CI regenerates predictions from this exact code and compares row-by-row.
+ANALYSIS_SPEC_REL = "analysis_spec.json"
+ANALYSIS_MODULES = [
+    "src/churn/simulator/rng.py",
+    "src/churn/simulator/latent.py",
+    "src/churn/simulator/population.py",
+    "src/churn/simulator/events.py",
+    "src/churn/simulator/generate.py",
+    "src/churn/featurestore/offline.py",
+    "src/churn/instrument/model.py",
+    "src/churn/instrument/experiment.py",
+    "src/churn/instrument/floors.py",
+    "src/churn/instrument/measure.py",
+]
+
 
 def _normalized_sha256(rel_path: str) -> str:
     raw = (config.ROOT / rel_path).read_bytes()
@@ -52,6 +69,18 @@ def _normalized_sha256(rel_path: str) -> str:
 
 def compute_hashes() -> dict:
     return {rel: _normalized_sha256(rel) for rel in HASHED_FILES}
+
+
+def analysis_code_hashes() -> dict:
+    """Per-module normalized sha256 for the Stage-2 ANALYSIS code set."""
+    return {rel: _normalized_sha256(rel) for rel in ANALYSIS_MODULES}
+
+
+def analysis_code_sha256() -> str:
+    """One combined hash over the sorted per-module hashes (order-independent, drift-sensitive)."""
+    per = analysis_code_hashes()
+    blob = "".join(f"{rel}:{per[rel]}\n" for rel in sorted(per))
+    return "sha256:" + hashlib.sha256(blob.encode()).hexdigest()
 
 
 def load_lock(path=SIM_LOCK_PATH) -> dict:
@@ -102,6 +131,29 @@ def write_lock(path=SIM_LOCK_PATH) -> dict:
     return lock
 
 
+def write_stage2_lock(numeric_floors: dict | None = None, path=SIM_LOCK_PATH) -> dict:
+    """Promote the lock to Stage 2: freeze the analysis-spec + analysis-code hashes (D1/D2).
+
+    ``numeric_floors`` is filled by the confirmatory run after beacon round R emits (CI re-derives
+    it from R and asserts equality); left null when only freezing the analysis code + spec.
+    """
+    lock = load_lock(path)
+    lock["stage"] = 2
+    lock["stage2"] = {
+        "analysis_spec_sha256": _normalized_sha256(ANALYSIS_SPEC_REL),
+        "analysis_code_sha256": analysis_code_sha256(),
+        "analysis_modules": ANALYSIS_MODULES,
+        "analysis_code_hashes": analysis_code_hashes(),
+        "numeric_floors": numeric_floors,
+        "note": (
+            "Stage-2 freeze: analysis_spec.json + ANALYSIS code hashed. numeric_floors computed "
+            "from the frozen pipeline after beacon round R emits and re-derived by CI (D4)."
+        ),
+    }
+    path.write_text(json.dumps(registry.to_jsonable(lock), indent=2) + "\n", newline="\n")
+    return lock
+
+
 def check_lock(path=SIM_LOCK_PATH) -> list[str]:
     """Return a list of drift messages (empty list == the lock is consistent)."""
     lock = load_lock(path)
@@ -123,6 +175,15 @@ def check_lock(path=SIM_LOCK_PATH) -> list[str]:
         drifts.append("beacon: committed recipe != churn.simulator.beacon.recipe()")
     if lock.get("controls") != P.load_params()["controls"]:
         drifts.append("controls: lock copy != simulator.params.json controls")
+    # Stage 2: once promoted, the analysis-spec + analysis-code hashes are frozen too.
+    if lock.get("stage") == 2:
+        s2 = lock.get("stage2", {})
+        if s2.get("analysis_spec_sha256") != _normalized_sha256(ANALYSIS_SPEC_REL):
+            drifts.append(f"{ANALYSIS_SPEC_REL}: analysis_spec hash != current")
+        if s2.get("analysis_code_sha256") != analysis_code_sha256():
+            drifts.append("analysis_code: lock combined hash != current ANALYSIS modules")
+        if s2.get("analysis_modules") != ANALYSIS_MODULES:
+            drifts.append("analysis_modules: lock list != code ANALYSIS_MODULES")
     return drifts
 
 
@@ -131,6 +192,10 @@ def main(argv=None) -> int:
     if "--write" in argv:
         write_lock()
         print(f"Wrote {SIM_LOCK_PATH.name}")
+        return 0
+    if "--stage2" in argv:
+        write_stage2_lock()
+        print(f"Wrote {SIM_LOCK_PATH.name} (Stage-2 analysis freeze)")
         return 0
     drifts = check_lock()
     if drifts:

@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "description": "Stage-2 frozen analysis spec (PHASE0_LOCK_DECISIONS.md D1/D3). Feature definitions, model family + hyperparameters, preprocessing, selection metrics, the bootstrap unit + CI method, and the oracle/floor inputs. Hashed into simulator.lock.json (stage2) alongside the analysis-code hash; every pass/fail RNG seed is beacon-R-derived, never stored here.",
+  "features": {
+    "static_features": [
+      "region",
+      "device_type",
+      "subscription_plan",
+      "account_age_days",
+      "monthly_spend",
+      "avg_order_value"
+    ],
+    "event_features": [
+      "days_since_last_login",
+      "login_count_14d",
+      "login_count_28d",
+      "login_count_90d",
+      "login_trend_28_90",
+      "mean_session_depth_28d",
+      "mean_session_depth_90d",
+      "has_login_90d",
+      "order_count_90d",
+      "support_count_90d",
+      "mean_sentiment_90d",
+      "has_support_90d",
+      "payment_fail_count_180d",
+      "downgrade_count_365d"
+    ],
+    "windows_days": {
+      "near_days": 14,
+      "short_days": 28,
+      "mid_days": 90,
+      "pay_days": 180,
+      "full_days": 365
+    },
+    "recency_sentinel_days": 365.0,
+    "pit_rule": "event_ts <= t0 (strict PIT); dedup by event_id; empty-window sentinels per D6.6",
+    "feature_module": "churn.featurestore.offline:compute_pit_features"
+  },
+  "model": {
+    "family": "logistic_regression",
+    "hyperparameters": {"max_iter": 2000, "penalty": "l2", "C": 1.0, "solver": "lbfgs"},
+    "feature_sets": {
+      "static": "static_features",
+      "static_event": "static_features + event_features"
+    },
+    "model_module": "churn.instrument.model:build_pipeline"
+  },
+  "preprocessing": {
+    "numeric": ["SimpleImputer(strategy=median)", "StandardScaler()"],
+    "categorical": ["SimpleImputer(strategy=most_frequent)", "OneHotEncoder(handle_unknown=ignore)"],
+    "fit_scope": "per_fold"
+  },
+  "cross_validation": {
+    "splitter": "StratifiedGroupKFold",
+    "n_splits": 5,
+    "group": "customer_id",
+    "shuffle": true,
+    "note": "group-aware by customer_id (no customer straddles the split, §4.7)"
+  },
+  "selection_metrics": ["roc_auc", "pr_auc"],
+  "bootstrap": {
+    "unit": "customer",
+    "method": "percentile",
+    "alpha": 0.05,
+    "n_rounds": 2000,
+    "statistic": "paired dAUC = AUC(static+event) - AUC(static)"
+  },
+  "oracle": {
+    "score": "analytic_bayes_hazard",
+    "inputs": ["h_t0", "q_static"],
+    "n_oracle": 200000,
+    "static_model": "frozen analysis static pipeline (train/holdout split at n_oracle)"
+  },
+  "floor": {
+    "rule": "max(MDE, substantive_fraction_f * recoverable_lift) per metric",
+    "substantive_fraction_f": 0.5,
+    "mde": "mde_z_multiplier * SE_dAUC from paired n=1600 Monte-Carlo subsamples",
+    "entrypoint": "churn.instrument.floors:compute_floors"
+  },
+  "success_criterion": "confirmatory paired dAUC lower bound > floor for BOTH roc_auc and pr_auc; a miss is a recorded null (strict stopping rule, D3)",
+  "dependency_versions": {
+    "scikit_learn": "1.9.0",
+    "numpy": "2.4.6",
+    "pandas": "2.3.3",
+    "duckdb": "1.5.4"
+  }
+}

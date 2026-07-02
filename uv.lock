@@ -205,8 +205,8 @@ name = "authlib"
 version = "1.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "joserfc" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "joserfc", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/36/98/7d93f30d029643c0275dbc0bd6d5a6f670661ee6c9a94d93af7ab4887600/authlib-1.7.2.tar.gz", hash = "sha256:2cea25fefcd4e7173bdf1372c0afc265c8034b23a8cd5dcb6a9164b826c64231", size = 176511, upload-time = "2026-05-06T08:10:23.116Z" }
 wheels = [
@@ -422,39 +422,39 @@ wheels = [
 
 [package.optional-dependencies]
 avro = [
-    { name = "attrs" },
-    { name = "authlib" },
-    { name = "avro" },
-    { name = "cachetools" },
-    { name = "fastavro" },
-    { name = "httpx" },
-    { name = "orjson" },
-    { name = "requests" },
+    { name = "attrs", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "authlib", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "avro", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cachetools", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "fastavro", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "httpx", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "orjson", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "requests", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 json = [
-    { name = "attrs" },
-    { name = "authlib" },
-    { name = "cachetools" },
-    { name = "httpx" },
-    { name = "jsonschema" },
-    { name = "orjson" },
-    { name = "pyrsistent" },
+    { name = "attrs", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "authlib", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cachetools", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "httpx", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jsonschema", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "orjson", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "pyrsistent", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 protobuf = [
-    { name = "attrs" },
-    { name = "authlib" },
-    { name = "cachetools" },
-    { name = "googleapis-common-protos" },
-    { name = "httpx" },
-    { name = "orjson" },
-    { name = "protobuf" },
+    { name = "attrs", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "authlib", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cachetools", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "googleapis-common-protos", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "httpx", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "orjson", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "protobuf", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 schemaregistry = [
-    { name = "attrs" },
-    { name = "authlib" },
-    { name = "cachetools" },
-    { name = "httpx" },
-    { name = "orjson" },
+    { name = "attrs", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "authlib", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cachetools", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "httpx", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "orjson", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 
 [[package]]
@@ -655,6 +655,7 @@ dashboard = [
 ]
 featurestore = [
     { name = "duckdb" },
+    { name = "pyarrow" },
     { name = "redis" },
 ]
 orchestration = [
@@ -693,6 +694,7 @@ requires-dist = [
     { name = "mlflow", marker = "extra == 'tracking'", specifier = ">=2.17" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
+    { name = "pyarrow", marker = "extra == 'featurestore'", specifier = ">=17.0" },
     { name = "quixstreams", marker = "sys_platform == 'linux' and extra == 'streaming'", specifier = ">=3.0" },
     { name = "redis", marker = "extra == 'featurestore'", specifier = ">=5.0" },
     { name = "scikit-learn", specifier = ">=1.4" },
@@ -1119,7 +1121,7 @@ name = "googleapis-common-protos"
 version = "1.75.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "protobuf" },
+    { name = "protobuf", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b5/c8/f439cffde755cffa462bfbb156278fa6f9d09119719af9814b858fd4f81f/googleapis_common_protos-1.75.0.tar.gz", hash = "sha256:53a062ff3c32552fbd62c11fe23768b78e4ddf0494d5e5fd97d3f4689c75fbbd", size = 151035, upload-time = "2026-05-07T08:04:49.423Z" }
 wheels = [
@@ -1439,7 +1441,7 @@ name = "joserfc"
 version = "1.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/26/abe1ad855eb334b5ebc9c6495d4798e12bee70e5e8e815d54570710b8312/joserfc-1.7.2.tar.gz", hash = "sha256:537ffb8888b2df039cb5b6d017d7cff6f09d521ce65d89cc9b8ab752b1cff947", size = 233183, upload-time = "2026-06-29T09:03:10.868Z" }
 wheels = [
@@ -1451,7 +1453,7 @@ name = "jsonlines"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs" },
+    { name = "attrs", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/35/87/bcda8e46c88d0e34cad2f09ee2d0c7f5957bccdb9791b0b934ec84d84be4/jsonlines-4.0.0.tar.gz", hash = "sha256:0c6d2c09117550c089995247f605ae4cf77dd1533041d366351f6f298822ea74", size = 11359, upload-time = "2023-09-01T12:34:44.187Z" }
 wheels = [
@@ -2433,9 +2435,9 @@ name = "pydantic-settings"
 version = "2.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "typing-inspection" },
+    { name = "pydantic", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "python-dotenv", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "typing-inspection", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/20/c5/dbbc27b814c71676593d1c3f718e6cd7d4f00652cefa24b75f7aa3efb25e/pydantic_settings-2.11.0.tar.gz", hash = "sha256:d0e87a1c7d33593beb7194adb8470fc426e95ba02af83a0f23474a04c9a08180", size = 188394, upload-time = "2025-09-24T14:19:11.764Z" }
 wheels = [
@@ -2624,17 +2626,17 @@ name = "quixstreams"
 version = "3.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "confluent-kafka", extra = ["avro", "json", "protobuf", "schemaregistry"] },
-    { name = "httpx" },
-    { name = "jsonlines" },
-    { name = "jsonpath-ng" },
-    { name = "jsonschema" },
-    { name = "orjson" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "rich" },
-    { name = "rocksdict" },
-    { name = "typing-extensions" },
+    { name = "confluent-kafka", extra = ["avro", "json", "protobuf", "schemaregistry"], marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "httpx", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jsonlines", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jsonpath-ng", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jsonschema", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "orjson", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "pydantic", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "pydantic-settings", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "rich", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "rocksdict", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/d8/12f037f005a420b6652eb432c36fcba7e929cdae33984715d229f66f01a7/quixstreams-3.24.0-py3-none-any.whl", hash = "sha256:8afc01deb44b7f5383f77affdb184b53c1bc39c24f44433a334f05fca3ca0d43", size = 404410, upload-time = "2026-06-12T12:10:42.174Z" },

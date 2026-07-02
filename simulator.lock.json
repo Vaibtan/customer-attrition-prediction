@@ -1,6 +1,6 @@
 {
   "lock_version": 1,
-  "stage": 1,
+  "stage": 2,
   "description": "Stage-1 pre-registration lock (PHASE0_LOCK_DECISIONS.md D1-D5). Freezes the world (docs/simulator_spec.md + simulator.params.json) and the confirmatory-seed / floor-RNG beacon recipe. The analysis spec, analysis-code hash, and numeric floors are Stage 2.",
   "git_sha_at_generation": "b17ab5e",
   "git_sha_note": "HEAD when the lock was written (typically the PARENT of the lock commit); informational provenance only -- NOT verified by check_lock and not dirty-checked.",
@@ -68,9 +68,33 @@
     }
   },
   "stage2": {
-    "analysis_spec_sha256": null,
-    "analysis_code_sha256": null,
+    "analysis_spec_sha256": "sha256:2870bff6ae3cac1f1d5279f954ee709836afaf931e84c1b144f86d786c822b26",
+    "analysis_code_sha256": "sha256:abbb0b76b135ce6641701280716e990a679b9d5363de8c345b42f7c0c9750b36",
+    "analysis_modules": [
+      "src/churn/simulator/rng.py",
+      "src/churn/simulator/latent.py",
+      "src/churn/simulator/population.py",
+      "src/churn/simulator/events.py",
+      "src/churn/simulator/generate.py",
+      "src/churn/featurestore/offline.py",
+      "src/churn/instrument/model.py",
+      "src/churn/instrument/experiment.py",
+      "src/churn/instrument/floors.py",
+      "src/churn/instrument/measure.py"
+    ],
+    "analysis_code_hashes": {
+      "src/churn/simulator/rng.py": "sha256:cd0eb9badaf1d18fa34c74d619ab8608d5b60c7ba8996e0d1492ed33059ddd19",
+      "src/churn/simulator/latent.py": "sha256:4b3f3eec0af67eec663a7fae6a1abdeda019fafc68cf71b043b6307059e1817b",
+      "src/churn/simulator/population.py": "sha256:07ba8cd5604b29398aca9698ae83e0827836e51659dd3e75b410a37b2eb190fc",
+      "src/churn/simulator/events.py": "sha256:87093dc454dc2222e6792dbcc1de9ee6135522ec47db13c0632c164469076175",
+      "src/churn/simulator/generate.py": "sha256:b7d04378d8418592378007c1a6169632eb3df302abe2fae58fe14da97a24953b",
+      "src/churn/featurestore/offline.py": "sha256:8a58d15f504bed047149863df665580642b9f37338477e34cc1c249b2ed6ed68",
+      "src/churn/instrument/model.py": "sha256:5877f18d358124d7828101e52e05c770fc27f60bc02867b63c06af5677459f6c",
+      "src/churn/instrument/experiment.py": "sha256:a7a7d1fb22195f3101b908c153bcf5a3c4c696cb006a7eae8c697ae2a781806d",
+      "src/churn/instrument/floors.py": "sha256:93145ca376360d17054add07c4d8d541e99a501061451bb50e0f4fffb48dc936",
+      "src/churn/instrument/measure.py": "sha256:d0da31f3abba81eef996538bf072eef1f65dc892a2986d56fb3affaf0df2c71c"
+    },
     "numeric_floors": null,
-    "note": "Added at Stage 2 (end of Phase 1): analysis_spec.json hash + analysis-code hash + numeric floor values computed from the frozen pipeline after beacon round R emits."
+    "note": "Stage-2 freeze: analysis_spec.json + ANALYSIS code hashed. numeric_floors computed from the frozen pipeline after beacon round R emits and re-derived by CI (D4)."
   }
 }

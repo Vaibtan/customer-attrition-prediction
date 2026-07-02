@@ -30,6 +30,7 @@ streaming = [
 featurestore = [
     "redis>=5.0",             # online store (Phase 2)
     "duckdb>=1.1",            # offline store + ASOF PIT joins (Phase 1)
+    "pyarrow>=17.0",          # Parquet engine for the durable event log (Phase 1, D6.3)
 ]
 orchestration = [
     "dagster>=1.9",           # asset-based DAGs, partitioned backfills (Phase 5)

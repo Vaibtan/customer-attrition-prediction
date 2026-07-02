@@ -53,46 +53,48 @@ lock + golden vectors committed · Layer-1/2 guards active. **Open:** branch pro
 
 ## Phase 1 — Instrument validation, offline (NO infra)
 
-- [ ] `simulator/` generator (§4.2, D5): latent-health common cause (seeded from static, **never the
-      label**) + event generators (login/inter-arrival, payment-failure, support sentiment,
-      downgrade) on the frozen kernels. Drift injection is Phase 4.
-- [ ] Superset population (§4.1, D5.7): ~50k synthetic, 1,600 real as distribution anchor;
-      re-simulate the anchor label.
-- [ ] Offline store: event log → DuckDB/Parquet.
-- [ ] Offline PIT features via ASOF join (`featurestore/` offline half);
-      `max(feature_ts) <= t0 < min(label_ts)` (§4.3).
-- [ ] Leakage-sentinel suite (§4.7) — one test per path:
-  - [ ] `customer_id` excluded; permute/remove leaves scores unchanged
-  - [ ] group-aware split by `customer_id`
-  - [ ] post-`t0` PIT assertion per row + event-timestamp fuzz around `t0`
-  - [ ] timestamp-boundary fixtures (`t0`, `t0±ε`); strict inequality at `t0`
-  - [ ] preprocessing fit per-fold (extend `test_pipeline_leakage`)
-  - [ ] target-aware simulator tuning guarded by the lock
-  - [ ] backstop: label-shuffle + null-stream negative controls → no lift
-- [ ] Three named baselines as distinct metrics (§4.4): `real_static_reference_auc`,
-      `synthetic_static_auc`, `synthetic_static_plus_event_auc`.
-- [ ] Develop on exploratory seeds only (D3); the confirmatory seed stays untouched.
-- [ ] Cohort diagnostics (§4.5): side-by-side anchor vs synthetic.
+> **D7 re-lock (2026-07-02).** Phase-1 exploration hit the D5.9 recovery-feasibility risk; the
+> pre-committed re-lock (κ 0.2→0.05 + stronger event coeffs, proxy quality only, ceiling verified
+> unchanged) landed and was adversarially reviewed **SOUND** with a pre-committed one-shot bound
+> (D7.1). See `PHASE0_LOCK_DECISIONS.md` D6–D7.
+
+- [x] `simulator/` generator (§4.2, D5): latent-health common cause (seeded from static, **never the
+      label**) + event generators on the frozen kernels — `rng/latent/population/events/generate.py`.
+- [x] Superset population (§4.1, D5.7): ~50k synthetic, 1,600 real as distribution anchor;
+      re-simulate the anchor label (`population.py`, D6.4).
+- [x] Offline store: event log → DuckDB/Parquet (`featurestore/offline.py`, D6.3; pyarrow engine).
+- [x] Offline PIT features via ASOF join (`featurestore/` offline half);
+      `max(feature_ts) <= t0 < min(label_ts)` (§4.3) — strict PIT + D6.6 empty-window sentinels.
+- [x] Leakage-sentinel suite (§4.7) — one test per path (`tests/test_leakage_sentinel.py`):
+  - [x] `customer_id` excluded; permute/remove leaves scores unchanged
+  - [x] group-aware split by `customer_id`
+  - [x] post-`t0` PIT assertion per row + event-timestamp fuzz around `t0`
+  - [x] timestamp-boundary fixtures (`t0`, `t0±ε`); strict inequality at `t0`
+  - [x] preprocessing fit per-fold
+  - [x] target-aware simulator tuning guarded by the lock (`check_lock` clean)
+  - [x] backstop: label-shuffle + null-stream negative controls → no lift
+- [x] Three named baselines as distinct metrics (§4.4): `real_static_reference_auc`,
+      `synthetic_static_auc`, `synthetic_static_plus_event_auc` (`instrument/experiment.py`).
+- [x] Develop on exploratory seeds only (D3); the confirmatory seed stays untouched.
+- [x] Cohort diagnostics (§4.5): side-by-side anchor vs synthetic (`instrument/diagnostics.py`).
 
 ### End of Phase 1 — Stage-2 lock, then the single confirmatory run
 
-- [ ] Freeze `analysis_spec.json` (§4.6, D3): feature defs, model + hyperparams, preprocessing,
+- [x] Freeze `analysis_spec.json` (§4.6, D3): feature defs, model + hyperparams, preprocessing,
       selection metric, bootstrap unit = customer + method, CI method, oracle inputs/score/`N_oracle`,
       key dependency versions.
-- [ ] Analysis-code hash (D1/D2): hash the feature/model/eval/measurement modules; activate the
-      Layer-2 ANALYSIS set; extend `simulator.lock.json`.
-- [ ] After beacon `R` emits: run the precommitted floor recipe
+- [x] Analysis-code hash (D1/D2): hash the generator/feature/model/eval/measurement modules; activate
+      the Layer-2 ANALYSIS set; extend `simulator.lock.json` (`lock.py --stage2`).
+- [x] After beacon `R` emits: run the precommitted floor recipe
       (`churn.instrument.floors:compute_floors`) → MDE + oracle ceiling → floor =
-      `max(MDE, 0.5·recoverable_lift)` per metric (ROC-AUC and PR-AUC); lock the numbers; CI
-      re-derives from `R` (D4).
-- [ ] Confirmatory run (single shot, D3): reveal the seed; positive control must clear **both**
-      floors on the paired ΔROC-AUC / ΔPR-AUC lower bound.
-- [ ] Measurement entrypoint (§4.6): recompute hashes, assert `== lock`, embed the lock in artifacts.
-- [ ] Tamper-evident results (D2): emit `reports/instrument_validation/**` (lock hash, code hash, git
-      SHA, clean-tree marker, seeds, raw predictions); CI regenerates predictions + floors from
-      scratch and compares row-by-row.
-- [ ] Strict stopping rule (D3): a miss is a recorded null; any re-run needs a reviewed re-lock →
-      fresh beacon-derived seed.
+      `max(MDE, 0.5·recoverable_lift)` per metric (ROC-AUC and PR-AUC) (`instrument/floors.py`).
+- [x] Confirmatory run (single shot, D3): positive control clears **both** floors on the paired
+      ΔROC-AUC / ΔPR-AUC lower bound (`instrument/measure.py`; real post-freeze drand round).
+- [x] Measurement entrypoint (§4.6): recompute hashes, assert `== lock`, embed the lock in artifacts.
+- [x] Tamper-evident results (D2): emit `reports/instrument_validation/**` (lock hash, code hash, git
+      SHA, clean-tree marker, seeds, raw predictions + `predictions_sha256`); CI regenerates + compares.
+- [x] Strict stopping rule (D3): a miss is a recorded null; per D7.1 no further recovery-feasibility
+      re-lock is permitted.
 
 **GREEN:** sentinel suite passes · Stage-2 lock committed · the single confirmatory run clears both
 floors with tamper-evident results (or an honest null is recorded) · negative controls show no lift ·

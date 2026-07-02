@@ -637,12 +637,15 @@ observer left too little for a noisy pipeline to clear 50% with the paired-boots
 ### The decision — strengthen the two *proxy-quality* knobs (both ceiling-neutral)
 
 - **`κ`: 0.2 → 0.05** (weekly mean-reversion; `σ` re-derived to `σ0·√(1−(1−κ)²) ≈ 0.312`). **`κ` is
-  ceiling-neutral:** the stationary `h(t0) ~ N(μ(x), σ0²)` distribution the oracle/static AUCs depend
-  on does **not** involve `κ` (the tuning MC and the non-degeneracy test both evaluate at
-  stationarity). `κ` governs only how *predictable* `h_52` is from the observed weeks — i.e. how much
-  of the frozen signal leaves an observable event trace. A slower reversion (~20-week memory) lifts
-  the clairvoyant recovery ceiling above the floor. A ~20-week health memory is if anything *more*
-  realistic than 5 weeks for underlying customer engagement/satisfaction.
+  ceiling-neutral — provably, not just asymptotically:** the latent path is initialized *at*
+  stationarity (`h_0 = μ + σ0·z`, `σ0 = 1`), and an AR(1) started from its stationary law *stays*
+  stationary, so `h(t0) ~ N(μ(x), σ0²)` **for any `κ`** — not merely "well within 52 weeks." The
+  oracle/static AUCs and `recoverable_lift` depend only on that marginal, so they are `κ`-free by
+  construction (the tuning MC and non-degeneracy test compute the ceiling from the stationary draw;
+  the adversarial review re-verified `oracle_auc≈0.802 / static_auc≈0.641 / RL≈0.161` identical at
+  `κ ∈ {0.05, 0.20, 0.90}`). `κ` governs only how *predictable* `h_52` is from the observed weeks —
+  how much of the frozen signal leaves an observable event trace. A ~20-week health memory is if
+  anything *more* realistic than 5 weeks for underlying customer engagement/satisfaction.
 - **Event coefficients strengthened** (the D5.5-designated a-priori proxy knobs): higher baseline
   rates + steeper health slopes (login ~6/wk `b_L=0.7`; session-depth `b_P=1.8`; order ~1/wk
   `b_O=0.5`; payment ~7% `b_F=−1.0`; support ~0.4/wk `b_S=−0.7`; sentiment `b_T=0.85`; downgrade ~3%
@@ -684,3 +687,17 @@ floor (worst-seed ROC lower bound `0.088`, most `0.11–0.18`) — a well-powere
 aligned to the validated multi-window readout set; `simulator.lock.json` was regenerated
 (`--write`). **D7 amends** D5.1/D5.6 (`κ`), D5.5/D5.9 (event coefficients) — the D5.x prose is the
 historical record; the frozen numbers now live in the re-locked `simulator.params.json`.
+
+### D7.1 — Stopping bound on recovery-feasibility re-locks (closes the forking-worlds surface)
+
+The adversarial review's one substantive concern: nothing *procedurally* caps how many times a
+"peek exploratory results → strengthen proxy quality → re-freeze" loop may run, and each iteration
+erodes the positive control's evidential value (it drifts toward "a correct pipeline recovers a
+signal engineered to be recoverable"). To close this **garden-of-forking-worlds** surface,
+**pre-committed here: at most ONE recovery-feasibility re-lock is permitted, and D7 is it.** After
+D7, the frozen world is fixed for the recovery question: a Stage-2 confirmatory miss is a **recorded
+null** (D3 stopping rule) — it may **not** trigger another proxy-quality re-lock. Any future frozen-
+world change must be for a *different, disclosed* reason (e.g. a corrected bug in a link), never to
+lift recovery. This bounds the loop at one and keeps the discriminating power of the instrument
+resting where it belongs — on the **negative controls + the leakage-sentinel suite** (untouched by
+D7 and passing), with the positive control scoped honestly as a *synthetic* recoverability check.
