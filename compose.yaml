@@ -1,10 +1,10 @@
 # Churn production platform -- full-stack Docker Compose.
 #
-# PHASE 0 SKELETON: service placeholders so `docker compose config` validates.
-# Nothing here is wired up yet. Each service is fleshed out in its phase
-# (ENHANCEMENT_PLAN.md §5 architecture / §8 phases). `profiles` gate services
-# whose code/images do not exist until later phases, so a bare `docker compose up`
-# stays minimal and the not-yet-real services are opt-in.
+# Full-stack platform. `profiles` gate each subsystem so a bare `docker compose up` stays minimal
+# and everything is opt-in (see ENHANCEMENT_PLAN.md, architecture section). Profiles: streaming
+# (Redpanda + producer + Quix consumer + Redis), serve (FastAPI /score), tracking (MLflow),
+# observability (Prometheus + Grafana), dashboard (Streamlit), test (real-infra integration
+# runner). The `dagster` service is still a placeholder image -- orchestration runs in-process.
 name: churn-platform
 
 services:

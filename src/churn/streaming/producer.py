@@ -42,9 +42,14 @@ def to_wire(record: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def _dumps_wire(wire: Mapping[str, object]) -> bytes:
+    """Wire dict -> compact, deterministic JSON bytes (stable key order): the single wire codec."""
+    return json.dumps(wire, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
 def serialize_event(record: Mapping[str, object]) -> bytes:
     """Event record -> compact, deterministic JSON bytes (stable key order)."""
-    return json.dumps(to_wire(record), separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return _dumps_wire(to_wire(record))
 
 
 def deserialize_event(raw: bytes | str) -> dict[str, object]:
@@ -78,7 +83,7 @@ def produce_events(
         producer.produce(
             topic,
             key=wire["customer_id"].encode("utf-8"),
-            value=json.dumps(wire, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+            value=_dumps_wire(wire),
         )
         count += 1
         producer.poll(0)  # serve delivery callbacks without blocking

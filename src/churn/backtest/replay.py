@@ -67,7 +67,8 @@ def run_backtest(cfg: BacktestConfig | None = None) -> pd.DataFrame:
     rows = []
     steps_since_retrain = 99
     for step in range(cfg.n_steps):
-        x, y = _window(rng, cfg.window_n, _angle(step, cfg))
+        angle = _angle(step, cfg)
+        x, y = _window(rng, cfg.window_n, angle)
         proba = champion.predict_proba(x)[:, 1]
         true_auc = float(roc_auc_score(y, proba))
         band = cbpe.estimate(proba, n_rounds=100, seed=cfg.seed + step)
@@ -89,7 +90,7 @@ def run_backtest(cfg: BacktestConfig | None = None) -> pd.DataFrame:
         rows.append(
             {
                 "step": step,
-                "angle": _angle(step, cfg),
+                "angle": angle,
                 "true_auc": true_auc,
                 "cbpe_estimate": band.estimate,
                 "cbpe_lo": band.lo,
