@@ -29,6 +29,18 @@ _SPEC = OFF.DEFAULT_FEATURE_SPEC
 _W = _SPEC["windows"]
 _SENTINEL = _SPEC["recency_sentinel_days"]
 
+# Window lengths (days) for the fixed-t0 incremental fast path, bound from the single feature-spec
+# source (offline) so ``CustomerAggregator.add`` stays in lockstep with ``compute_features`` and the
+# offline SQL. Change a window in the spec and the O(1) path moves with it instead of silently
+# diverging on a stale literal.
+_NEAR, _SHORT, _MID, _PAY, _FULL = (
+    _W["near_days"],
+    _W["short_days"],
+    _W["mid_days"],
+    _W["pay_days"],
+    _W["full_days"],
+)
+
 # One event as held in state: (event_time, event_type, value). ``value`` is NaN for event types
 # that carry no magnitude (order / payment_fail / downgrade -- only their counts matter).
 EventRow = tuple[pd.Timestamp, str, float]
@@ -141,9 +153,9 @@ def feature_vector(events_by_id: Mapping[str, EventRow], t0: pd.Timestamp) -> di
     """
     t0 = pd.Timestamp(t0)
     rows = [
-        (pd.Timestamp(ts), typ, _as_float(val))
+        (ts_p, typ, _as_float(val))
         for ts, typ, val in events_by_id.values()
-        if pd.Timestamp(ts) <= t0
+        if (ts_p := pd.Timestamp(ts)) <= t0
     ]
     return compute_features(rows, t0)
 
@@ -185,31 +197,31 @@ class CustomerAggregator:
             return
         if event_type == "login":
             val = _as_float(value)
-            if ts_ns > t0 - 14 * _NS_PER_DAY:
+            if ts_ns > t0 - _NEAR * _NS_PER_DAY:
                 self.login_14 += 1
-            if ts_ns > t0 - 28 * _NS_PER_DAY:
+            if ts_ns > t0 - _SHORT * _NS_PER_DAY:
                 self.login_28 += 1
                 self.sd28_sum += val
                 self.sd28_n += 1
-            if ts_ns > t0 - 90 * _NS_PER_DAY:
+            if ts_ns > t0 - _MID * _NS_PER_DAY:
                 self.login_90 += 1
                 self.sd90_sum += val
                 self.sd90_n += 1
             if self.last_login_ns is None or ts_ns > self.last_login_ns:
                 self.last_login_ns = ts_ns
         elif event_type == "support":
-            if ts_ns > t0 - 90 * _NS_PER_DAY:
+            if ts_ns > t0 - _MID * _NS_PER_DAY:
                 self.support_90 += 1
                 self.sent90_sum += _as_float(value)
                 self.sent90_n += 1
         elif event_type == "order":
-            if ts_ns > t0 - 90 * _NS_PER_DAY:
+            if ts_ns > t0 - _MID * _NS_PER_DAY:
                 self.order_90 += 1
         elif event_type == "payment_fail":
-            if ts_ns > t0 - 180 * _NS_PER_DAY:
+            if ts_ns > t0 - _PAY * _NS_PER_DAY:
                 self.pay_180 += 1
         elif event_type == "downgrade":
-            if ts_ns > t0 - 365 * _NS_PER_DAY:
+            if ts_ns > t0 - _FULL * _NS_PER_DAY:
                 self.down_365 += 1
 
     def features(self) -> dict[str, float]:
@@ -242,16 +254,6 @@ class CustomerAggregator:
     @classmethod
     def from_state(cls, raw: Mapping[str, object]) -> CustomerAggregator:
         return cls(**raw)
-
-
-def feature_vector_incremental(
-    events_by_id: Mapping[str, EventRow], t0: pd.Timestamp
-) -> dict[str, float]:
-    """Fold a deduped event map through :class:`CustomerAggregator` (the fast-path reducer)."""
-    agg = CustomerAggregator(t0_ns=int(pd.Timestamp(t0).value))
-    for ts, typ, val in events_by_id.values():
-        agg.add(int(pd.Timestamp(ts).value), typ, val)
-    return agg.features()
 
 
 def _record_field(rec: object, name: str) -> object:
