@@ -9,7 +9,9 @@ Runs in the ``test-runner`` container: ``docker compose --profile test run --rm 
 
 from __future__ import annotations
 
+import shutil
 import time
+import uuid
 
 import pytest
 
@@ -142,3 +144,64 @@ def test_crash_recovery_converges(
     CONSUMER.run_consumer(**common, timeout=10.0)  # resume to completion
 
     _assert_store_matches_offline(store, _offline(events, ids), ids)
+
+
+def test_state_wipe_recovers_only_with_changelog(
+    redpanda_broker, redis_url, kafka_topic, redis_client, tmp_path
+):
+    """A restart that LOSES local state (ephemeral container) still converges -- iff the changelog
+    is on. ``test_crash_recovery_converges`` reuses the same ``state_dir``, so local state always
+    survives and it never exercises the durability contract; this one wipes ``state_dir`` between
+    the crash and the restart (committed offsets survive in Kafka), which is the real deployment.
+
+    The positive case relies on the DEPLOYED default (``use_changelog_topics`` unset), so flipping
+    the default back to False turns this test red. The negative case pins it explicitly False to
+    prove the failure mode is real -- and that the changelog is what fixes it.
+    """
+    ds = G.build_population_dataset(P.load_params(), seed=4242, n_synthetic=0)
+    ids = _cohort(ds, 30)
+    events = ds.events[ds.events["customer_id"].isin(ids)].reset_index(drop=True)
+    offline = _offline(events, ids)
+    # Shuffle the stream so EVERY customer's events straddle the mid-stream commit point; the
+    # post-wipe undercount then hits every customer (a customer whose events all land on one side
+    # of the cut would recover by accident). Offline parity is order-independent, so the target is
+    # unchanged; the producer keys by customer_id, so a customer's events still share one partition.
+    stream = events.sample(frac=1.0, random_state=5).reset_index(drop=True)
+    produced = PROD.produce_events(redpanda_broker, kafka_topic, stream)
+
+    def _crash_wipe_recover(*, use_changelog: bool | None) -> OnlineStore:
+        # Fresh group + Redis each variant so committed offsets / online vectors don't cross over.
+        redis_client.flushdb()
+        store = OnlineStore(RedisBackend(redis_url))
+        tag = "default" if use_changelog is None else ("cl" if use_changelog else "nocl")
+        group = f"wipe-{tag}-{uuid.uuid4().hex[:8]}"
+        state_dir = tmp_path / group
+        common = dict(
+            broker=redpanda_broker,
+            topic=kafka_topic,
+            consumer_group=group,
+            t0=T0,
+            online_store=store,
+            commit_every=1,  # commit offsets so the restart resumes PAST the processed half
+            state_dir=str(state_dir),
+        )
+        if use_changelog is not None:  # None -> exercise the deployed default
+            common["use_changelog_topics"] = use_changelog
+        # Consume the first half (committing offsets), then "crash".
+        partial = CONSUMER.run_consumer(**common, timeout=30.0, count=produced // 2)
+        assert partial == produced // 2
+        # Ephemeral-container restart: the local state dir is GONE; committed offsets remain.
+        shutil.rmtree(state_dir, ignore_errors=True)
+        CONSUMER.run_consumer(**common, timeout=15.0)  # resume the same group from the commit
+        return store
+
+    # Deployed default: Quix rebuilds per-customer state from the durable changelog before resuming,
+    # so the online store still equals the offline PIT vector after a total local-state loss.
+    _assert_store_matches_offline(_crash_wipe_recover(use_changelog=None), offline, ids)
+
+    # Changelog off: the first half's per-customer state is lost and those events are never
+    # redelivered (offsets already advanced), so the store permanently undercounts -- the parity
+    # guarantee silently fails. This asserts the regression has teeth (would be green pre-fix).
+    diverged = _crash_wipe_recover(use_changelog=False)
+    with pytest.raises(AssertionError):
+        _assert_store_matches_offline(diverged, offline, ids)

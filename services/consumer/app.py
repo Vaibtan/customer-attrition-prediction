@@ -49,6 +49,7 @@ def run_consumer(
     commit_every: int = 0,
     state_dir: str | None = None,
     auto_offset_reset: str = "earliest",
+    use_changelog_topics: bool = True,
 ) -> int:
     """Consume ``topic`` and write each customer's online vector to ``online_store``.
 
@@ -58,6 +59,16 @@ def run_consumer(
     the number of events processed. Reuses the SAME reducer as the offline PIT query, so what lands
     in Redis is the offline feature vector by construction; dedup-by-event_id makes reprocessing
     (at-least-once redelivery / crash recovery) idempotent.
+
+    ``use_changelog_topics`` (default True) is load-bearing for that guarantee across a restart.
+    Quix checkpoints in the order *produce state to the changelog -> commit input offsets -> flush
+    local state to disk*, so committed offsets can outrun the on-disk state. Without the changelog,
+    any restart that loses the local ``state_dir`` (an ephemeral container, or a crash in the
+    commit->flush window) resumes past already-committed events with EMPTY per-customer state --
+    those events are never redelivered, so ``CustomerAggregator`` permanently undercounts and Redis
+    diverges from the offline PIT vector. With it, Quix rebuilds local state from the durable
+    changelog (written before the offset commit) before resuming, so parity survives a full state
+    wipe. Kept as a parameter so the regression test can exercise both paths.
     """
     from quixstreams import Application
     from quixstreams.state import State
@@ -69,7 +80,7 @@ def run_consumer(
         consumer_group=consumer_group,
         auto_offset_reset=auto_offset_reset,
         state_dir=state_dir,
-        use_changelog_topics=False,
+        use_changelog_topics=use_changelog_topics,
         commit_every=commit_every,
     )
     in_topic = app.topic(

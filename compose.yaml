@@ -84,8 +84,13 @@ services:
       CONSUMER_GROUP: "churn-streaming-v1"
       REDIS_URL: "redis://redis:6379/0"
       CHURN_AS_OF: "2025-01-01T00:00:00"
-      CHURN_STATE_DIR: "/tmp/quix-state"
+      CHURN_STATE_DIR: "/var/lib/quix-state"
       CONSUMER_TIMEOUT: "0"
+    # Persist Quix's per-customer state across restarts. Correctness is guaranteed by the changelog
+    # (use_changelog_topics=True) even if this is lost; the volume just avoids a full changelog
+    # replay on a routine restart. See services/consumer/app.py::run_consumer.
+    volumes:
+      - consumer-state:/var/lib/quix-state
     depends_on:
       redpanda:
         condition: service_healthy
@@ -189,3 +194,4 @@ volumes:
   redis-data:
   grafana-data:
   mlflow-data:
+  consumer-state:
