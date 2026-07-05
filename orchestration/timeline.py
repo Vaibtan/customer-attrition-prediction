@@ -24,7 +24,9 @@ from dagster import (
 
 from churn.drift import detectors as DET
 from churn.drift import simulate as SIM
+from churn.lifecycle.adapters import ColumnSubsetModel
 from churn.lifecycle.retrain import retrain_and_gate
+from churn.lifecycle.synthetic import linear_boundary_xy
 from orchestration.assets import SliceConfig
 
 # Weekly scoring instants leading up to the anchor t0 -- the timeline to back-fill over.
@@ -72,28 +74,16 @@ class RetrainScenario(ConfigurableResource):
     seed: int = 0
 
 
-class _SubsetModel:
-    """A model fit on a column subset, exposing ``predict_proba`` on the full design matrix."""
-
-    def __init__(self, model, cols):
-        self.model = model
-        self.cols = cols
-
-    def predict_proba(self, x):
-        return self.model.predict_proba(x[:, self.cols])
-
-
 def _reference_and_current(scenario: RetrainScenario):
     from sklearn.linear_model import LogisticRegression
 
     rng = np.random.default_rng(scenario.seed)
-    x = rng.normal(0.0, 1.0, (scenario.n, 3))
-    y = (x[:, 0] + 0.5 * x[:, 1] + rng.normal(0.0, 1.0, scenario.n) > 0).astype(int)
+    x, y = linear_boundary_xy(rng, scenario.n)
     reference = pd.DataFrame(x, columns=_SYNTH_FEATURES)
     current = reference.copy()
     if scenario.inject_drift:
         current = SIM.covariate_shift(current, "f0", magnitude=1.0, delta=2.5)
-    champion = _SubsetModel(LogisticRegression().fit(x[:, :1], y), cols=[0])  # weak incumbent
+    champion = ColumnSubsetModel(LogisticRegression().fit(x[:, :1], y), cols=[0])  # weak incumbent
     return reference, current, y, current.to_numpy(), champion
 
 
@@ -117,7 +107,9 @@ def drift_gated_retrain(
 
     context.log.info(f"drift on {report.drifted_features} -> retraining challenger")
     outcome = retrain_and_gate(
-        lambda: _SubsetModel(LogisticRegression(max_iter=1000).fit(x_current, y), cols=[0, 1, 2]),
+        lambda: ColumnSubsetModel(
+            LogisticRegression(max_iter=1000).fit(x_current, y), cols=[0, 1, 2]
+        ),
         champion,
         x_current,
         y,
