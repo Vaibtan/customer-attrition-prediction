@@ -68,12 +68,8 @@ def _numeric_drift(name, ref, cur, psi_threshold: float, alpha: float) -> Featur
 
 
 def _categorical_drift(name, ref, cur, psi_threshold: float, alpha: float) -> FeatureDrift:
-    ref_c = ref.astype("object").where(ref.notna(), monitoring.MISSING_TOKEN)
-    cur_c = cur.astype("object").where(cur.notna(), monitoring.MISSING_TOKEN)
-    levels = sorted(set(ref_c.unique()) | set(cur_c.unique()), key=str)
-    ref_counts = ref_c.value_counts().reindex(levels, fill_value=0).to_numpy()
-    cur_counts = cur_c.value_counts().reindex(levels, fill_value=0).to_numpy()
-    # PSI reuses the chi-square counts (categorical_psi would rebuild them identically).
+    # One alignment feeds both PSI and the chi-square table (no separate categorical_psi rebuild).
+    _, ref_counts, cur_counts = monitoring.aligned_level_counts(ref, cur)
     psi = monitoring.psi_from_counts(ref_counts, cur_counts)
     table = np.vstack([ref_counts, cur_counts])
     table = table[:, table.sum(axis=0) > 0]  # drop empty levels (chi2 needs positive margins)

@@ -24,12 +24,25 @@ def psi_from_counts(reference_counts, current_counts, eps: float = 1e-6) -> floa
     return float(psi)
 
 
-def categorical_psi(reference: pd.Series, current: pd.Series) -> float:
+def aligned_level_counts(
+    reference: pd.Series, current: pd.Series
+) -> tuple[list, np.ndarray, np.ndarray]:
+    """Align two categorical series onto one sorted level set (missing -> ``MISSING_TOKEN``).
+
+    Returns ``(levels, ref_counts, cur_counts)`` -- integer counts reindexed onto the sorted union
+    of levels, so PSI, the JS distance, and the chi-square contingency table all read the SAME
+    aligned counts instead of each re-deriving them (and risking a mismatch).
+    """
     ref = reference.astype("object").where(reference.notna(), MISSING_TOKEN)
     cur = current.astype("object").where(current.notna(), MISSING_TOKEN)
     levels = sorted(set(ref.unique()) | set(cur.unique()), key=str)
     ref_counts = ref.value_counts().reindex(levels, fill_value=0).to_numpy()
     cur_counts = cur.value_counts().reindex(levels, fill_value=0).to_numpy()
+    return levels, ref_counts, cur_counts
+
+
+def categorical_psi(reference: pd.Series, current: pd.Series) -> float:
+    _, ref_counts, cur_counts = aligned_level_counts(reference, current)
     return psi_from_counts(ref_counts, cur_counts)
 
 
@@ -58,11 +71,9 @@ def jensen_shannon_distance(reference: pd.Series, current: pd.Series) -> float:
     report showed ``NaN``). For a per-feature significance test use ``drift.detectors`` (chi-
     square); this scalar keeps the legacy report's stat column meaningful for categoricals.
     """
-    ref = reference.astype("object").where(reference.notna(), MISSING_TOKEN)
-    cur = current.astype("object").where(current.notna(), MISSING_TOKEN)
-    levels = sorted(set(ref.unique()) | set(cur.unique()), key=str)
-    p = ref.value_counts().reindex(levels, fill_value=0).to_numpy(dtype="float64")
-    q = cur.value_counts().reindex(levels, fill_value=0).to_numpy(dtype="float64")
+    _, ref_counts, cur_counts = aligned_level_counts(reference, current)
+    p = ref_counts.astype("float64")
+    q = cur_counts.astype("float64")
     p = p / p.sum() if p.sum() else p
     q = q / q.sum() if q.sum() else q
     m = 0.5 * (p + q)
