@@ -21,6 +21,7 @@ pytest.importorskip("quixstreams")
 import pandas as pd  # noqa: E402
 
 from churn.featurestore import offline as OFF  # noqa: E402
+from churn.featurestore.cohort import make_cohort  # noqa: E402
 from churn.featurestore.online import OnlineStore  # noqa: E402
 from churn.simulator import generate as G  # noqa: E402
 from churn.simulator import params as P  # noqa: E402
@@ -41,7 +42,7 @@ def _cohort(ds, n: int) -> list[str]:
 
 
 def _offline(events: pd.DataFrame, ids: list[str]) -> pd.DataFrame:
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [T0] * len(ids)})
+    cohort = make_cohort(ids, T0)
     return OFF.compute_pit_features(events, cohort).set_index("customer_id")
 
 

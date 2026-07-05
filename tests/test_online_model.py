@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from churn.featurestore import offline as OFF
+from churn.featurestore.cohort import make_cohort
 from churn.instrument import model as M
 from churn.serving import online_model as OM
 from churn.simulator import generate as G
@@ -24,7 +25,7 @@ T0 = pd.Timestamp("2025-01-01T00:00:00")
 def trained():
     ds = G.build_population_dataset(P.load_params(), seed=4242, n_synthetic=0)
     ids = ds.customers["customer_id"].head(500).tolist()
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [T0] * len(ids)})
+    cohort = make_cohort(ids, T0)
     pit = OFF.compute_pit_features(ds.events, cohort)
     model = OM.train_online_model(ds, pit, seed=42)
     return ds, pit.set_index("customer_id"), model

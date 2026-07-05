@@ -52,10 +52,11 @@ def pit_snapshot(
 ) -> MaterializeResult:
     """PIT features as of THIS partition's t0 -- one run per partition in a backfill."""
     from churn.featurestore import offline as OFF
+    from churn.featurestore.cohort import make_cohort
 
     t0 = pd.Timestamp(context.partition_key)
     ids = timeline_events["customer_ids"]
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [t0] * len(ids)})
+    cohort = make_cohort(ids, t0)
     pit = OFF.compute_pit_features(timeline_events["events"], cohort)
     return MaterializeResult(
         metadata={

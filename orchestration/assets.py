@@ -49,10 +49,11 @@ def synthetic_dataset(slice_config: SliceConfig) -> dict:
 def offline_pit_features(synthetic_dataset: dict, slice_config: SliceConfig) -> pd.DataFrame:
     """Offline DuckDB point-in-time features keyed by customer (the batch scoring path)."""
     from churn.featurestore import offline as OFF
+    from churn.featurestore.cohort import make_cohort
 
     ids = synthetic_dataset["customer_ids"]
     t0 = pd.Timestamp(slice_config.t0)
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [t0] * len(ids)})
+    cohort = make_cohort(ids, t0)
     return OFF.compute_pit_features(synthetic_dataset["events"], cohort).set_index("customer_id")
 
 

@@ -20,6 +20,7 @@ import pandas as pd
 import pytest
 
 from churn.featurestore import offline as OFF
+from churn.featurestore.cohort import make_cohort
 from churn.instrument import model as M
 from churn.simulator import generate as G
 from churn.simulator import params as P
@@ -48,7 +49,7 @@ def _ev(rows: list[dict]) -> pd.DataFrame:
 
 
 def _cohort(ids, t0=T0):
-    return pd.DataFrame({"customer_id": list(ids), "t0": [t0] * len(list(ids))})
+    return make_cohort(ids, t0)
 
 
 # --- Path 1: customer-ID memorization --------------------------------------------------------

@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from churn.featurestore import offline as OFF
+from churn.featurestore.cohort import make_cohort
 from churn.simulator import generate as G
 from churn.simulator import params as P
 from churn.streaming import aggregate as AGG
@@ -30,7 +31,7 @@ def _ev(rows: list[dict]) -> pd.DataFrame:
 
 
 def _assert_parity(events: pd.DataFrame, ids: list[str], t0=T0):
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [t0] * len(ids)})
+    cohort = make_cohort(ids, t0)
     offline = OFF.compute_pit_features(events, cohort).set_index("customer_id")
     # Both online reducers must equal offline: the recompute reference AND the O(1)-per-event
     # incremental path the deployed consumer actually runs (SQL == recompute == incremental).

@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from churn.featurestore import offline as OFF
+from churn.featurestore.cohort import make_cohort
 
 T0 = pd.Timestamp("2025-01-01T00:00:00")
 
@@ -26,7 +27,7 @@ def _events(rows: list[dict]) -> pd.DataFrame:
 
 
 def _cohort(ids: list[str], t0: pd.Timestamp = T0) -> pd.DataFrame:
-    return pd.DataFrame({"customer_id": ids, "t0": [t0] * len(ids)})
+    return make_cohort(ids, t0)
 
 
 def test_feature_frame_is_keyed_one_row_per_cohort_key():

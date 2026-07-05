@@ -12,6 +12,7 @@ import pytest
 
 from churn.featurestore import offline as OFF
 from churn.featurestore import online as ON
+from churn.featurestore.cohort import make_cohort
 from churn.simulator import generate as G
 from churn.simulator import params as P
 from churn.streaming import aggregate as AGG
@@ -30,7 +31,7 @@ def test_online_store_serves_the_offline_pit_vector():
     ds = G.build_population_dataset(P.load_params(), seed=4242, n_synthetic=0)
     ids = ds.customers["customer_id"].head(30).tolist()
     events = ds.events[ds.events["customer_id"].isin(ids)]
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [T0] * len(ids)})
+    cohort = make_cohort(ids, T0)
 
     offline = OFF.compute_pit_features(events, cohort).set_index("customer_id")
     online_vecs = AGG.aggregate_stream(events, {c: T0 for c in ids})

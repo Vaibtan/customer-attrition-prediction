@@ -21,6 +21,7 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 
 from churn import config, evaluate, registry
+from churn.featurestore.cohort import make_cohort
 from churn.instrument import model as M
 from churn.scoring import score_to_tier
 
@@ -98,7 +99,7 @@ def _build_full_dataset(seed: int, n_synthetic: int, t0: pd.Timestamp):
 
     dataset = G.build_population_dataset(P.load_params(), seed=seed, n_synthetic=n_synthetic)
     ids = dataset.customers["customer_id"].tolist()
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [t0] * len(ids)})
+    cohort = make_cohort(ids, t0)
     pit = OFF.compute_pit_features(dataset.events, cohort)
     return dataset, pit
 

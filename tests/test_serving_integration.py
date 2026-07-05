@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from api.online import create_online_app  # noqa: E402
 from churn.featurestore import offline as OFF  # noqa: E402
+from churn.featurestore.cohort import make_cohort  # noqa: E402
 from churn.featurestore.online import OnlineStore  # noqa: E402
 from churn.serving import online_model as OM  # noqa: E402
 from churn.simulator import generate as G  # noqa: E402
@@ -57,7 +58,7 @@ def test_online_score_equals_offline_batch_score(
 
     # Train + register the deployable online model on a broad cohort (stable fit).
     train_ids = ds.customers["customer_id"].head(500).tolist()
-    train_cohort = pd.DataFrame({"customer_id": train_ids, "t0": [T0] * len(train_ids)})
+    train_cohort = make_cohort(train_ids, T0)
     train_pit = OFF.compute_pit_features(ds.events, train_cohort)
     model = OM.train_online_model(ds, train_pit, seed=42)
     run_dir = OM.save_online_model(model, base_dir=tmp_path)
@@ -75,7 +76,7 @@ def test_online_score_equals_offline_batch_score(
         state_dir=str(tmp_path / "quix-state"),
     )
 
-    cohort = pd.DataFrame({"customer_id": ids, "t0": [T0] * len(ids)})
+    cohort = make_cohort(ids, T0)
     offline = OFF.compute_pit_features(events, cohort).set_index("customer_id")
     stat = ds.customers.set_index("customer_id")
     scorer = OM.OnlineScorer(model)
