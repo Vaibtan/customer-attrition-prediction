@@ -66,3 +66,14 @@ def test_save_load_round_trip(trained, tmp_path):
     b = OM.OnlineScorer(loaded).score(static, event)
     assert a.churn_probability == pytest.approx(b.churn_probability, abs=1e-12)
     assert a.risk_tier == b.risk_tier
+
+
+def test_run_id_threaded_through_load_and_scorer(trained, tmp_path):
+    # ISS-04: the online path must report the REAL registry run id, not a configured path. A
+    # freshly-trained model has none; a loaded one carries it, and the scorer re-exposes it.
+    ds, pit, model = trained
+    assert model.run_id is None
+    run_dir = OM.save_online_model(model, base_dir=tmp_path)
+    loaded = OM.load_online_model(run_dir)
+    assert loaded.run_id == run_dir.name
+    assert OM.OnlineScorer(loaded).run_id == run_dir.name

@@ -82,7 +82,9 @@ def test_online_score_equals_offline_batch_score(
     scorer = OM.OnlineScorer(model)
 
     client = TestClient(create_online_app(run_dir=str(run_dir), redis_url=redis_url))
-    assert client.get("/health").json()["model_loaded"] is True
+    health = client.get("/health").json()
+    assert health["model_loaded"] is True
+    assert health["run_id"] == run_dir.name  # ISS-04: the real registry run id, not a config path
 
     for c in ids:
         static = {
@@ -100,6 +102,7 @@ def test_online_score_equals_offline_batch_score(
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["features_source"] == "redis"
+        assert body["model_run_id"] == run_dir.name  # ISS-04: real run id threaded to the response
         assert body["churn_probability"] == pytest.approx(expected, abs=1e-9)
         assert body["risk_tier"] in {"low", "medium", "high"}
 

@@ -5,6 +5,10 @@ reads the latest event-feature vector from Redis (written by the streaming consu
 ``customer_id``) and combines it with the static attributes in the request, scoring with the
 deployed static+event model. Online features == offline PIT features (parity), so this equals the
 offline batch score for the same ``(customer, t0)`` -- train/serve consistency at the score level.
+
+Built on the shared :func:`api.scoring_app.scoring_app` scaffold (ADR 0005): the scaffold owns
+load-once caching, the health/503 contract, and metrics; ``_score_online`` owns the online-specific
+work (read Redis by ``customer_id``, 404 on a cache miss, merge the request's static attributes).
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from api.scoring_app import scoring_app
 from churn.featurestore.online import OnlineStore
 from churn.instrument import model as M
 from churn.serving.online_model import OnlineScorer, load_online_model
@@ -43,36 +48,11 @@ def _static_attrs(req: OnlineScoreRequest) -> dict[str, object]:
 
 
 def create_online_app(run_dir: str | None = None, redis_url: str | None = None) -> FastAPI:
-    app = FastAPI(
-        title="Churn Online Scoring",
-        version="0.1.0",
-        description="On-demand single-customer scoring from Redis online features (Sec 3).",
-    )
     run_dir = run_dir or os.getenv("CHURN_ONLINE_MODEL_RUN_DIR")
     redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
     store = OnlineStore.from_url(redis_url)
-    state: dict[str, object] = {}
 
-    def _scorer() -> OnlineScorer:
-        if "scorer" not in state:
-            state["scorer"] = OnlineScorer(load_online_model(run_dir))
-        return state["scorer"]  # type: ignore[return-value]
-
-    @app.get("/health")
-    def health():
-        try:
-            _scorer()
-        except FileNotFoundError:
-            return {"status": "degraded", "model_loaded": False}
-        return {"status": "ok", "model_loaded": True}
-
-    @app.post("/score/online", response_model=OnlineScoreResponse)
-    def score_online(req: OnlineScoreRequest):
-        try:
-            scorer = _scorer()
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-
+    def _score_online(scorer: OnlineScorer, req: OnlineScoreRequest) -> OnlineScoreResponse:
         event = store.get(req.customer_id)
         if event is None:
             raise HTTPException(
@@ -84,13 +64,19 @@ def create_online_app(run_dir: str | None = None, redis_url: str | None = None) 
             churn_probability=result.churn_probability,
             risk_tier=result.risk_tier,
             features_source="redis",
-            model_run_id=str(run_dir) if run_dir else None,
+            model_run_id=scorer.run_id,
         )
 
-    from api.metrics import add_metrics
-
-    add_metrics(app, "online-scoring")
-    return app
+    return scoring_app(
+        title="Churn Online Scoring",
+        description="On-demand single-customer scoring from Redis online features (Sec 3).",
+        path="/score/online",
+        loader=lambda: OnlineScorer(load_online_model(run_dir)),
+        request_model=OnlineScoreRequest,
+        response_model=OnlineScoreResponse,
+        score_fn=_score_online,
+        metrics_label="online-scoring",
+    )
 
 
 app = create_online_app()

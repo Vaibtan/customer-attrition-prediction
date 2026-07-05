@@ -33,10 +33,11 @@ MODEL_NAME = "online_static_event"
 
 @dataclass(frozen=True)
 class OnlineModel:
-    """A fitted static+event pipeline plus its risk-tier cutpoints."""
+    """A fitted static+event pipeline plus its risk-tier cutpoints and source run id."""
 
     pipeline: Pipeline
     cutpoints: dict
+    run_id: str | None = None
 
 
 def train_online_model(dataset, pit_features: pd.DataFrame, seed: int = config.SEED) -> OnlineModel:
@@ -72,6 +73,11 @@ class OnlineScorer:
     def __init__(self, model: OnlineModel) -> None:
         self.model = model
 
+    @property
+    def run_id(self) -> str | None:
+        """Registry run id of the loaded model (None for a freshly-trained, unsaved model)."""
+        return self.model.run_id
+
     def score(self, static: Mapping[str, object], event: Mapping[str, object]) -> OnlineScore:
         design_row = assemble_row(static, event)
         proba = float(self.model.pipeline.predict_proba(design_row)[:, 1][0])
@@ -89,7 +95,7 @@ def save_online_model(model: OnlineModel, base_dir: Path = config.MODELS_DIR) ->
 def load_online_model(run_dir: Path | str | None = None) -> OnlineModel:
     """Load a persisted online model (pipeline + cutpoints) from a registry run directory."""
     loaded = registry.load_run(run_dir)
-    return OnlineModel(pipeline=loaded.model, cutpoints=loaded.cutpoints)
+    return OnlineModel(pipeline=loaded.model, cutpoints=loaded.cutpoints, run_id=loaded.run_id)
 
 
 def _build_full_dataset(seed: int, n_synthetic: int, t0: pd.Timestamp):
