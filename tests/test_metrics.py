@@ -10,6 +10,8 @@ from churn.evaluate import (
     Economics,
     bootstrap_auc_ci,
     bootstrap_auc_diff_ci,
+    bootstrap_diff_ci,
+    bootstrap_pr_auc_diff_ci,
     classification_metrics,
     confusion_at,
     expected_value,
@@ -79,6 +81,19 @@ def test_bootstrap_auc_diff_ci_straddles_zero_for_identical_models():
     d = bootstrap_auc_diff_ci(y_true, proba, proba, n_rounds=200, seed=0)
     assert d["diff_lo"] <= 0.0 <= d["diff_hi"]
     assert np.isclose(d["diff_mean"], 0.0)
+
+
+def test_bootstrap_diff_ci_matches_separate_calls():
+    # ISS-13: the combined diff shares one resample matrix with the two single-metric bootstraps,
+    # so at the same seed its bands must equal calling them separately (no numeric change, half the
+    # bootstrap work).
+    rng = np.random.default_rng(3)
+    y_true = rng.integers(0, 2, 80)
+    a = rng.random(80)
+    b = rng.random(80)
+    combined = bootstrap_diff_ci(y_true, a, b, n_rounds=200, seed=7)
+    assert combined["roc"] == bootstrap_auc_diff_ci(y_true, a, b, n_rounds=200, seed=7)
+    assert combined["pr"] == bootstrap_pr_auc_diff_ci(y_true, a, b, n_rounds=200, seed=7)
 
 
 def test_threshold_sensitivity_break_even_and_shape():

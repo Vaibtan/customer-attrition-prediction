@@ -99,9 +99,10 @@ def evaluate_promotion(
     chall = np.asarray(challenger_proba, dtype="float64")
     columns = segment_columns if segment_columns is not None else config.PROMOTION_SEGMENTS
 
-    kw = {"n_rounds": n_rounds, "seed": seed, "alpha": alpha}
-    delta_roc = evaluate.bootstrap_auc_diff_ci(y, chall, champ, **kw)
-    delta_pr = evaluate.bootstrap_pr_auc_diff_ci(y, chall, champ, **kw)
+    # One shared draws matrix scores both ΔROC-AUC and ΔPR-AUC (was two independent bootstraps).
+    bands = evaluate.bootstrap_diff_ci(y, chall, champ, n_rounds=n_rounds, seed=seed, alpha=alpha)
+    delta_roc = bands["roc"]
+    delta_pr = bands["pr"]
     primary_passed = delta_roc["diff_lo"] > mde and delta_pr["diff_lo"] > mde
 
     guardrails = [

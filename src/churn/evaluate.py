@@ -114,6 +114,43 @@ class CampaignThreshold:
         )
 
 
+def _bootstrap_metrics(
+    y_true: np.ndarray, metrics: dict, n_rounds: int, seed: int
+) -> dict[str, np.ndarray]:
+    """Resample row indices once; score each named metric on every valid resample.
+
+    ``metrics`` maps a name to a callable ``idx -> float``. A single ``(n_rounds, n)`` index draw is
+    shared across all metrics -- so paired diffs (and combined ROC/PR bands) score identical
+    resamples -- and single-class resamples (``< 2`` classes present) are skipped. Returns
+    ``{name: array of per-round scores}``. The draw sequence matches the old per-function bootstraps
+    exactly (same ``default_rng(seed).integers(0, n, (n_rounds, n))``), so results are unchanged.
+    """
+    n = len(y_true)
+    rng = np.random.default_rng(seed)
+    draws = rng.integers(0, n, size=(n_rounds, n))
+    out: dict[str, list[float]] = {name: [] for name in metrics}
+    for idx in draws:
+        if np.unique(y_true[idx]).size < 2:
+            continue
+        for name, fn in metrics.items():
+            out[name].append(fn(idx))
+    return {name: np.asarray(vals) for name, vals in out.items()}
+
+
+def _quantile_band(values: np.ndarray, alpha: float) -> tuple[float, float]:
+    return float(np.quantile(values, alpha / 2)), float(np.quantile(values, 1 - alpha / 2))
+
+
+def _diff_band(diffs: np.ndarray, alpha: float) -> dict:
+    lo, hi = _quantile_band(diffs, alpha)
+    return {
+        "diff_mean": float(diffs.mean()),
+        "diff_lo": lo,
+        "diff_hi": hi,
+        "n_rounds": int(diffs.size),
+    }
+
+
 def bootstrap_auc_ci(
     y_true,
     proba,
@@ -124,20 +161,11 @@ def bootstrap_auc_ci(
     """Percentile bootstrap CI for ROC-AUC; single-class resamples are skipped."""
     y_true = np.asarray(y_true)
     proba = np.asarray(proba, dtype="float64")
-    rng = np.random.default_rng(seed)
-    draws = rng.integers(0, len(y_true), size=(n_rounds, len(y_true)))
-    aucs = np.asarray(
-        [
-            roc_auc_score(y_true[idx], proba[idx])
-            for idx in draws
-            if np.unique(y_true[idx]).size >= 2
-        ]
-    )
-    return {
-        "auc_lo": float(np.quantile(aucs, alpha / 2)),
-        "auc_hi": float(np.quantile(aucs, 1 - alpha / 2)),
-        "n_rounds": int(aucs.size),
-    }
+    aucs = _bootstrap_metrics(
+        y_true, {"auc": lambda idx: roc_auc_score(y_true[idx], proba[idx])}, n_rounds, seed
+    )["auc"]
+    lo, hi = _quantile_band(aucs, alpha)
+    return {"auc_lo": lo, "auc_hi": hi, "n_rounds": int(aucs.size)}
 
 
 def bootstrap_auc_diff_ci(
@@ -150,23 +178,15 @@ def bootstrap_auc_diff_ci(
 ) -> dict:
     """Paired bootstrap CI for AUC(a) - AUC(b); a CI straddling 0 means a tie."""
     y_true = np.asarray(y_true)
-    proba_a = np.asarray(proba_a, dtype="float64")
-    proba_b = np.asarray(proba_b, dtype="float64")
-    rng = np.random.default_rng(seed)
-    draws = rng.integers(0, len(y_true), size=(n_rounds, len(y_true)))
-    diffs = np.asarray(
-        [
-            roc_auc_score(y_true[idx], proba_a[idx]) - roc_auc_score(y_true[idx], proba_b[idx])
-            for idx in draws
-            if np.unique(y_true[idx]).size >= 2
-        ]
-    )
-    return {
-        "diff_mean": float(diffs.mean()),
-        "diff_lo": float(np.quantile(diffs, alpha / 2)),
-        "diff_hi": float(np.quantile(diffs, 1 - alpha / 2)),
-        "n_rounds": int(diffs.size),
-    }
+    a = np.asarray(proba_a, dtype="float64")
+    b = np.asarray(proba_b, dtype="float64")
+    diffs = _bootstrap_metrics(
+        y_true,
+        {"d": lambda idx: roc_auc_score(y_true[idx], a[idx]) - roc_auc_score(y_true[idx], b[idx])},
+        n_rounds,
+        seed,
+    )["d"]
+    return _diff_band(diffs, alpha)
 
 
 def bootstrap_pr_auc_diff_ci(
@@ -184,24 +204,55 @@ def bootstrap_pr_auc_diff_ci(
     (each round scores both models on the identical indices) so the difference is properly paired.
     """
     y_true = np.asarray(y_true)
-    proba_a = np.asarray(proba_a, dtype="float64")
-    proba_b = np.asarray(proba_b, dtype="float64")
-    rng = np.random.default_rng(seed)
-    draws = rng.integers(0, len(y_true), size=(n_rounds, len(y_true)))
-    diffs = np.asarray(
-        [
-            average_precision_score(y_true[idx], proba_a[idx])
-            - average_precision_score(y_true[idx], proba_b[idx])
-            for idx in draws
-            if np.unique(y_true[idx]).size >= 2
-        ]
+    a = np.asarray(proba_a, dtype="float64")
+    b = np.asarray(proba_b, dtype="float64")
+    diffs = _bootstrap_metrics(
+        y_true,
+        {
+            "d": lambda idx: (
+                average_precision_score(y_true[idx], a[idx])
+                - average_precision_score(y_true[idx], b[idx])
+            )
+        },
+        n_rounds,
+        seed,
+    )["d"]
+    return _diff_band(diffs, alpha)
+
+
+def bootstrap_diff_ci(
+    y_true,
+    proba_a,
+    proba_b,
+    n_rounds: int = config.BOOTSTRAP_ROUNDS,
+    seed: int = config.SEED,
+    alpha: float = 0.05,
+) -> dict:
+    """Paired ΔROC-AUC and ΔPR-AUC CIs from ONE shared resample matrix.
+
+    Equivalent to calling :func:`bootstrap_auc_diff_ci` and :func:`bootstrap_pr_auc_diff_ci` with
+    the same ``seed`` (identical draws), but scores both metrics on the one draw instead of
+    regenerating it -- the promotion gate needs both, so this halves the bootstrap work. Returns
+    ``{"roc": <diff band>, "pr": <diff band>}``.
+    """
+    y_true = np.asarray(y_true)
+    a = np.asarray(proba_a, dtype="float64")
+    b = np.asarray(proba_b, dtype="float64")
+    scored = _bootstrap_metrics(
+        y_true,
+        {
+            "roc": lambda idx: (
+                roc_auc_score(y_true[idx], a[idx]) - roc_auc_score(y_true[idx], b[idx])
+            ),
+            "pr": lambda idx: (
+                average_precision_score(y_true[idx], a[idx])
+                - average_precision_score(y_true[idx], b[idx])
+            ),
+        },
+        n_rounds,
+        seed,
     )
-    return {
-        "diff_mean": float(diffs.mean()),
-        "diff_lo": float(np.quantile(diffs, alpha / 2)),
-        "diff_hi": float(np.quantile(diffs, 1 - alpha / 2)),
-        "n_rounds": int(diffs.size),
-    }
+    return {name: _diff_band(vals, alpha) for name, vals in scored.items()}
 
 
 def threshold_sensitivity(y_val, val_proba, y_test, test_proba, scenarios) -> list[dict]:
