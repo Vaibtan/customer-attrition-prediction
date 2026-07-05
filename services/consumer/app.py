@@ -21,7 +21,7 @@ import os
 
 import pandas as pd
 
-from churn.featurestore.online import OnlineStore, RedisBackend
+from churn.featurestore.online import OnlineStore
 from churn.streaming import aggregate as AGG
 
 DEFAULT_TOPIC = "customer-events"
@@ -34,7 +34,7 @@ def _ts_extractor(value: dict, headers: object, timestamp: int, timestamp_type: 
 
 
 def build_online_store(redis_url: str) -> OnlineStore:
-    return OnlineStore(RedisBackend(redis_url))
+    return OnlineStore.from_url(redis_url)
 
 
 def run_consumer(

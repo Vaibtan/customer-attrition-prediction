@@ -14,7 +14,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from churn.featurestore.online import OnlineStore, RedisBackend
+from churn.featurestore.online import OnlineStore
 from churn.instrument import model as M
 from churn.serving.online_model import OnlineScorer, load_online_model
 
@@ -50,7 +50,7 @@ def create_online_app(run_dir: str | None = None, redis_url: str | None = None) 
     )
     run_dir = run_dir or os.getenv("CHURN_ONLINE_MODEL_RUN_DIR")
     redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    store = OnlineStore(RedisBackend(redis_url))
+    store = OnlineStore.from_url(redis_url)
     state: dict[str, object] = {}
 
     def _scorer() -> OnlineScorer:

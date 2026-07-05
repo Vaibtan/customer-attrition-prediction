@@ -21,7 +21,7 @@ pytest.importorskip("quixstreams")
 import pandas as pd  # noqa: E402
 
 from churn.featurestore import offline as OFF  # noqa: E402
-from churn.featurestore.online import OnlineStore, RedisBackend  # noqa: E402
+from churn.featurestore.online import OnlineStore  # noqa: E402
 from churn.simulator import generate as G  # noqa: E402
 from churn.simulator import params as P  # noqa: E402
 from churn.streaming import producer as PROD  # noqa: E402
@@ -64,7 +64,7 @@ def test_large_scale_parity_and_throughput(
     shuffled = events.sample(frac=1.0, random_state=3).reset_index(drop=True)
 
     produced = PROD.produce_events(redpanda_broker, kafka_topic, shuffled)
-    store = OnlineStore(RedisBackend(redis_url))
+    store = OnlineStore.from_url(redis_url)
 
     start = time.perf_counter()
     processed = CONSUMER.run_consumer(
@@ -96,7 +96,7 @@ def test_fresh_group_replay_is_idempotent(
     adversarial = pd.concat([events, events.iloc[:25]], ignore_index=True)
     PROD.produce_events(redpanda_broker, kafka_topic, adversarial)
 
-    store = OnlineStore(RedisBackend(redis_url))
+    store = OnlineStore.from_url(redis_url)
 
     def _drain(group: str, sub: str) -> dict:
         CONSUMER.run_consumer(
@@ -126,7 +126,7 @@ def test_crash_recovery_converges(
     events = ds.events[ds.events["customer_id"].isin(ids)].reset_index(drop=True)
     produced = PROD.produce_events(redpanda_broker, kafka_topic, events)
 
-    store = OnlineStore(RedisBackend(redis_url))
+    store = OnlineStore.from_url(redis_url)
     state_dir = str(tmp_path / "quix-state")
     common = dict(
         broker=redpanda_broker,
@@ -172,7 +172,7 @@ def test_state_wipe_recovers_only_with_changelog(
     def _crash_wipe_recover(*, use_changelog: bool | None) -> OnlineStore:
         # Fresh group + Redis each variant so committed offsets / online vectors don't cross over.
         redis_client.flushdb()
-        store = OnlineStore(RedisBackend(redis_url))
+        store = OnlineStore.from_url(redis_url)
         tag = "default" if use_changelog is None else ("cl" if use_changelog else "nocl")
         group = f"wipe-{tag}-{uuid.uuid4().hex[:8]}"
         state_dir = tmp_path / group

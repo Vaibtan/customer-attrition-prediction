@@ -53,6 +53,11 @@ class OnlineStore:
     def __init__(self, backend: KVBackend | None = None) -> None:
         self.backend = backend if backend is not None else DictBackend()
 
+    @classmethod
+    def from_url(cls, url: str = "redis://localhost:6379/0") -> OnlineStore:
+        """Open a Redis-backed store -- the single place that wires ``OnlineStore`` to Redis."""
+        return cls(RedisBackend(url))
+
     def put(self, customer_id: str, features: dict[str, float]) -> None:
         self.backend.set(_KEY.format(cid=customer_id), json.dumps(features, sort_keys=True))
 

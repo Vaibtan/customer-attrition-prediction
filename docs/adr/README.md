@@ -14,3 +14,5 @@ decision record `../../PHASE0_LOCK_DECISIONS.md` (D1–D8), and the frozen world
   model, score-level parity, and the O(1) incremental aggregator with a recompute oracle.
 - [0004 — Promotion policy](0004-promotion-policy.md) — paired ΔROC-AUC/ΔPR-AUC lower bounds + MDE +
   guardrails; incumbent wins ties.
+- [0005 — Unified scoring-app scaffold](0005-unified-scoring-app-scaffold.md) — one `scoring_app`
+  behind `/score` + `/score/online`; loader-with-`.run_id` contract, bespoke logic in `score_fn`.

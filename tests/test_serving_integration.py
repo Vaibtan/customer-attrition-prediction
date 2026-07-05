@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from api.online import create_online_app  # noqa: E402
 from churn.featurestore import offline as OFF  # noqa: E402
-from churn.featurestore.online import OnlineStore, RedisBackend  # noqa: E402
+from churn.featurestore.online import OnlineStore  # noqa: E402
 from churn.serving import online_model as OM  # noqa: E402
 from churn.simulator import generate as G  # noqa: E402
 from churn.simulator import params as P  # noqa: E402
@@ -64,7 +64,7 @@ def test_online_score_equals_offline_batch_score(
 
     # Stream this cohort's events (shuffled) into Redis via the real broker + consumer.
     PROD.produce_events(redpanda_broker, kafka_topic, events.sample(frac=1.0, random_state=2))
-    store = OnlineStore(RedisBackend(redis_url))
+    store = OnlineStore.from_url(redis_url)
     CONSUMER.run_consumer(
         broker=redpanda_broker,
         topic=kafka_topic,

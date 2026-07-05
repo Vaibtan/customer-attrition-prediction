@@ -20,7 +20,7 @@ pytest.importorskip("quixstreams")
 import pandas as pd  # noqa: E402 -- after importorskip so host collection skips cleanly
 
 from churn.featurestore import offline as OFF  # noqa: E402
-from churn.featurestore.online import OnlineStore, RedisBackend  # noqa: E402
+from churn.featurestore.online import OnlineStore  # noqa: E402
 from churn.simulator import generate as G  # noqa: E402
 from churn.simulator import params as P  # noqa: E402
 from churn.streaming import producer as PROD  # noqa: E402
@@ -52,7 +52,7 @@ def test_streaming_parity_end_to_end(
     produced = PROD.produce_events(redpanda_broker, kafka_topic, adversarial)
     assert produced == len(adversarial)
 
-    store = OnlineStore(RedisBackend(redis_url))
+    store = OnlineStore.from_url(redis_url)
     processed = CONSUMER.run_consumer(
         broker=redpanda_broker,
         topic=kafka_topic,
