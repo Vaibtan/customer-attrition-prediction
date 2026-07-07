@@ -25,9 +25,20 @@
 > *produce-to-changelog → commit offsets → flush local state*, so the changelog (written before the
 > offset commit) is what makes recovery correct even with an ephemeral `state_dir`.
 >
-> **Remaining open:** ISS-02..08 (P2 dedup — the user wants ISS-04/05 design **grilled** first),
-> ISS-11..14 (P3/P4 — ISS-14 has semantic tradeoffs to decide), ISS-15..18 (P5 locked, deferred).
-> 17-commit unpushed backlog vs `origin/enhancement` still not pushed.
+> **Update — 2026-07-07: the whole P2 tier RESOLVED, COMMITTED & INTEGRATION-VERIFIED.**
+> Design was grilled first (`grill-with-docs`) → ISS-04 chose full unification, recorded in
+> **ADR 0005**. Commits: `77d8a85` ISS-06 (`OnlineStore.from_url`) · `2d38543` ISS-07/08 (lifecycle
+> `ColumnSubsetModel` + `linear_boundary_xy`) · `67b61c1` ISS-03 (`aligned_level_counts`) · `b747869`
+> ISS-05 (`make_cohort`, 12 sites) · `b4af59e` ISS-02/13 (shared `_bootstrap_metrics` + combined
+> `bootstrap_diff_ci`) · `9878285` ISS-04 (unified `api.scoring_app` + real online `run_id`).
+> **Verified on live infra**: `docker compose --profile test run --rm test-runner` → **7 passed**
+> (incl. `test_serving_integration` asserting the online `run_id` end-to-end). Full non-integration
+> suite green; ruff clean. Two backlog nuances corrected: ISS-07 docstrings also differed; ISS-08 is a
+> **2-way** dup (`timeline.py` ≡ `test_retrain.py`), not "×3" — `replay._window` left alone.
+>
+> **Remaining open (deferred by decision, not bugs):** ISS-11 (P3 config), ISS-12 (P4 cbpe O(n)),
+> ISS-14 (P4 Redis write amp — **grill the semantic tradeoffs first**); ISS-15..18 (P5 locked, need a
+> re-lock). All P0/P1/P2 commits pushed to `origin/enhancement`.
 
 These 4 mechanical fixes are **applied to the working tree (uncommitted)** and left the suite green
 (host `pytest` pass, `ruff check`/`format` clean, `docker compose config` valid):
@@ -263,8 +274,8 @@ issue** (**ISS-01**), not a race.
 ## Recommended sequence
 1. ~~**ISS-01** (P0 correctness — the flagship guarantee) + its crash test.~~ ✅ done (`f2281c0`).
 2. ~~**ISS-09 / ISS-10** (P1 parity-module, byte-identical, quick).~~ ✅ done (`73cfde1`).
-3. **ISS-02 … ISS-08** (P2 strategic dedup — one test-first slice each; ISS-04 is the highest-value).
-   ← next. Grill ISS-04 (shared serving scaffold, needs `run_id` threaded through
-   `OnlineModel`/`OnlineScorer`) and ISS-05 (cohort helper) before building.
-4. **ISS-11 … ISS-14** (P3/P4 config + efficiency). NB ISS-14 debounce/TTL change semantics.
+3. ~~**ISS-02 … ISS-08** (P2 strategic dedup).~~ ✅ done (`77d8a85`, `2d38543`, `67b61c1`, `b747869`,
+   `b4af59e`, `9878285`) + ADR 0005; 7-passed on live infra.
+4. **ISS-11 … ISS-14** (P3/P4 config + efficiency). ← next. NB ISS-14 debounce/TTL change semantics
+   (grill first).
 5. **ISS-15 … ISS-18** — only if/when a re-lock is decided (they ride along on that commit).
