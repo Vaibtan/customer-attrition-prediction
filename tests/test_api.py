@@ -52,3 +52,19 @@ def test_score_endpoint_uses_registered_model(tmp_path, sample):
     assert 0.0 <= body["churn_probability"] <= 1.0
     assert body["risk_tier"] in {"low", "medium", "high"}
     assert body["model_run_id"] == run_dir.name
+
+
+def test_score_rejects_infinite_payload_values():
+    """`1e400` parses to +inf and satisfies `ge=0`; allow_inf_nan=False must reject it (REV-09)."""
+    from pydantic import ValidationError  # noqa: PLC0415
+
+    from api.serve import CustomerPayload  # noqa: PLC0415
+
+    raw = (
+        '{"region": "North", "device_type": "Mobile", "subscription_plan": "Free",'
+        ' "account_age_days": 1e400, "monthly_spend": 50.0, "num_orders_last_90d": 5,'
+        ' "avg_order_value": 100.0, "support_tickets_raised": 1,'
+        ' "days_since_last_login": 100, "pages_per_session": 8.0}'
+    )
+    with pytest.raises(ValidationError):
+        CustomerPayload.model_validate_json(raw)

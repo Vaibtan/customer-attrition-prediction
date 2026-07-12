@@ -21,17 +21,19 @@ from churn.scoring import ScoredCustomer
 
 
 class CustomerPayload(BaseModel):
+    # allow_inf_nan=False everywhere: `inf` satisfies `ge=0`, would sail through the scaler and
+    # come back as a saturated 0/1 "probability" with HTTP 200 (REVIEW_ISSUES.md REV-09).
     customer_id: str | None = None
     region: str
     device_type: str
     subscription_plan: str
-    account_age_days: float = Field(ge=0)
-    monthly_spend: float | None = Field(default=None, ge=0)
-    num_orders_last_90d: float = Field(ge=0)
-    avg_order_value: float | None = Field(default=None, ge=0)
-    support_tickets_raised: float = Field(ge=0)
-    days_since_last_login: float = Field(ge=0)
-    pages_per_session: float | None = Field(default=None, ge=0)
+    account_age_days: float = Field(ge=0, allow_inf_nan=False)
+    monthly_spend: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    num_orders_last_90d: float = Field(ge=0, allow_inf_nan=False)
+    avg_order_value: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    support_tickets_raised: float = Field(ge=0, allow_inf_nan=False)
+    days_since_last_login: float = Field(ge=0, allow_inf_nan=False)
+    pages_per_session: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class ScoreResponse(BaseModel):

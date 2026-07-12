@@ -25,13 +25,15 @@ from churn.serving.online_model import OnlineScorer, load_online_model
 
 
 class OnlineScoreRequest(BaseModel):
+    # allow_inf_nan=False: see api/serve.py CustomerPayload (REV-09); the online pipeline has no
+    # domain-repair step at all, so an accepted `inf` would reach the model unclipped.
     customer_id: str
     region: str
     device_type: str
     subscription_plan: str
-    account_age_days: float = Field(ge=0)
-    monthly_spend: float | None = Field(default=None, ge=0)
-    avg_order_value: float | None = Field(default=None, ge=0)
+    account_age_days: float = Field(ge=0, allow_inf_nan=False)
+    monthly_spend: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    avg_order_value: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class OnlineScoreResponse(BaseModel):

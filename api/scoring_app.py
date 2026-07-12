@@ -12,6 +12,7 @@ with the *parameter* ``request_model``, so the annotation must stay a real class
 to parse the body (a stringized annotation would fail to resolve the local name).
 """
 
+import threading
 from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException
@@ -40,10 +41,15 @@ def scoring_app(
     """
     app = FastAPI(title=title, version="0.1.0", description=description)
     holder: dict[str, object] = {}
+    load_lock = threading.Lock()
 
     def get_model() -> object:
+        # Handlers are sync `def`s, so Starlette runs them in a threadpool: without the lock two
+        # concurrent first requests would each run loader() (double model load).
         if "model" not in holder:
-            holder["model"] = loader()
+            with load_lock:
+                if "model" not in holder:
+                    holder["model"] = loader()
         return holder["model"]
 
     @app.get("/health")

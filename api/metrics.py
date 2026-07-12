@@ -34,13 +34,23 @@ def add_metrics(app: FastAPI, service: str) -> FastAPI:
 
     @app.middleware("http")
     async def _instrument(request: Request, call_next):
+        # Label with the matched route TEMPLATE, not the raw URL: raw paths mint a new timeseries
+        # per scanner/typo URL (unbounded cardinality). Routing runs inside call_next, so the
+        # matched route is only on the scope afterwards; unmatched requests share one bucket.
+        # The try/finally guarantees uncaught 500s are counted too -- call_next re-raises before
+        # any code after it runs, which is exactly how the 5xx panel goes blind.
         start = time.perf_counter()
-        response = await call_next(request)
-        elapsed = time.perf_counter() - start
-        path = request.url.path
-        if path != "/metrics":  # don't measure the scrape itself
-            _LATENCY.labels(service, request.method, path).observe(elapsed)
-            _REQUESTS.labels(service, request.method, path, str(response.status_code)).inc()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+        finally:
+            elapsed = time.perf_counter() - start
+            route = request.scope.get("route")
+            path = route.path if route is not None else "<unmatched>"
+            if path != "/metrics":  # don't measure the scrape itself
+                _LATENCY.labels(service, request.method, path).observe(elapsed)
+                _REQUESTS.labels(service, request.method, path, str(status)).inc()
         return response
 
     @app.get("/metrics")
