@@ -32,8 +32,11 @@ jobs:
         run: |
           uv run ruff check .
           uv run ruff format --check .
-      - name: Tests
-        run: uv run pytest --cov=churn --cov-report=term-missing
+      - name: Tests (fast tier -- integration runs in its own job against live infra)
+        # The explicit marker filter makes ADR 0002's claim true in the workflow itself, not only
+        # via conftest's env-var skip: a leaked REDIS_URL-style env can no longer make this job
+        # attempt live connections.
+        run: uv run pytest -m "not integration" --cov=churn --cov-report=term-missing
       - name: Pipeline smoke
         run: uv run python -m churn.train --smoke
 

@@ -2,7 +2,7 @@
 
 - Reference rows: 1,600
 - Current rows: 1,600
-- Model run: 20260619T182613Z_logistic_regression
+- Model run: 20260619T193141Z_logistic_regression
 
 ## Data Quality
 
@@ -21,18 +21,18 @@
 
 ## Feature Drift
 
-| feature | psi | ks |
-| --- | --- | --- |
-| region | 0.000 |  |
-| device_type | 0.000 |  |
-| subscription_plan | 0.000 |  |
-| account_age_days | 0.000 | 0.000 |
-| monthly_spend | 0.000 | 0.000 |
-| num_orders_last_90d | 0.000 | 0.000 |
-| avg_order_value | 0.000 | 0.000 |
-| support_tickets_raised | 0.000 | 0.000 |
-| days_since_last_login | 0.000 | 0.000 |
-| pages_per_session | 0.000 | 0.000 |
+| feature | psi | stat | test |
+| --- | --- | --- | --- |
+| region | 0.000 | 0.000 | JSD |
+| device_type | 0.000 | 0.000 | JSD |
+| subscription_plan | 0.000 | 0.000 | JSD |
+| account_age_days | 0.000 | 0.000 | KS |
+| monthly_spend | 0.000 | 0.000 | KS |
+| num_orders_last_90d | 0.000 | 0.000 | KS |
+| avg_order_value | 0.000 | 0.000 | KS |
+| support_tickets_raised | 0.000 | 0.000 | KS |
+| days_since_last_login | 0.000 | 0.000 | KS |
+| pages_per_session | 0.000 | 0.000 | KS |
 
 ## Prediction Drift
 

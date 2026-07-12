@@ -22,6 +22,21 @@ def test_prometheus_scrapes_the_scoring_api():
     assert "api:8000" in text
 
 
+def test_mlflow_server_pin_matches_the_client_lock():
+    """The server image pins mlflow outside uv.lock; this is the sync guard (REV-17)."""
+    import re  # noqa: PLC0415
+
+    dockerfile = (ROOT / "infra/Dockerfile.mlflow").read_text()
+    pin = re.search(r"mlflow==([\d.]+)", dockerfile)
+    assert pin is not None, "Dockerfile.mlflow must pin an exact mlflow version"
+    lock = (ROOT / "uv.lock").read_text()
+    locked = re.search(r'name = "mlflow"\nversion = "([\d.]+)"', lock)
+    assert locked is not None
+    assert pin.group(1) == locked.group(1), (
+        f"server pin {pin.group(1)} != locked client {locked.group(1)}"
+    )
+
+
 def test_grafana_datasource_and_dashboard_provider_provisioned():
     ds = (ROOT / "infra/grafana/provisioning/datasources/prometheus.yml").read_text()
     assert "http://prometheus:9090" in ds

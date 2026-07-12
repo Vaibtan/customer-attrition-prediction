@@ -1,6 +1,14 @@
 # infra/
 
-Deployment infrastructure (Phase 6+): Dockerfiles, `prometheus.yml`, Grafana
-provisioning. Referenced by `compose.yaml` at the repo root.
+Deployment infrastructure, referenced by `compose.yaml` at the repo root:
 
-Empty at Phase 0 (scaffold only).
+- `Dockerfile.streaming` — producer + Quix consumer image (streaming profile).
+- `Dockerfile.mlflow` — MLflow tracking + model-registry server (sqlite backend, proxied
+  artifacts). The `mlflow==` pin must match `uv.lock`'s client version — guarded by
+  `tests/test_observability_config.py`.
+- `Dockerfile.dashboard` — Streamlit mission-control image.
+- `Dockerfile.test` — the real-infra integration test-runner (ADR 0002); the repo is bind-mounted
+  read-only at run time.
+- `prometheus.yml` — ops-only scrape config for the FastAPI `/metrics` endpoints. NOTE: the
+  `observability` profile scrapes services from the `serve` profile — run both for live panels.
+- `grafana/` — provisioned datasource + the churn-ops dashboard JSON.
