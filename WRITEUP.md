@@ -59,8 +59,9 @@ and plausibly Missing-At-Random.
 | `monthly_spend` | max `18,772` (median ≈ 56) | `≥ 0`, but extreme spikes are outliers |
 | `avg_order_value` | max `9,724` (median ≈ 122) | `≥ 0`, same |
 
-> **What is *not* an impossible value:** 11 customers have `num_orders_last_90d == 0`
-> with positive `monthly_spend`. This is **valid**, not dirty — spend is a 6-month
+> **What is *not* an impossible value:** 10 customers have `num_orders_last_90d == 0`
+> with positive `monthly_spend` (an 11th zero-order row has *missing* spend).
+> This is **valid**, not dirty — spend is a 6-month
 > average while orders are a 90-day count, so a customer who purchased in months 4–6
 > but not in the last 90 days legitimately has spend with zero recent orders. These
 > rows are normal lapsing customers (and the lapsing signal is exactly what we want
@@ -124,7 +125,7 @@ Values outside documented real-world ranges (`config.VALID_RANGES`) are mapped t
 We **only** repair values that are genuinely impossible (negatives, out-of-window
 sentinels). We considered a "zero orders but positive spend" consistency rule and
 **rejected it**: the two fields are measured over different windows (90 days vs 6
-months), so those 11 rows are valid lapsing customers, not dirty data. Nulling
+months), so those 10 rows are valid lapsing customers, not dirty data. Nulling
 their spend would have destroyed real signal — flagging that as a non-issue is the
 senior call here.
 

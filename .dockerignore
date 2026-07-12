@@ -1,4 +1,5 @@
 .git
+.github
 .venv
 .pytest_cache
 .ruff_cache
@@ -7,5 +8,10 @@ __pycache__
 .coverage
 htmlcov
 models/*
-reports/figures/*
+reports/
+docs/
 scored.csv
+# agent/tooling dirs: never needed in a build context
+.claude/
+.codex/
+.agents/

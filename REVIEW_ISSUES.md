@@ -262,9 +262,10 @@ locked items.
 - **REV-24** `tests/test_pipeline_leakage.py:18-30` — the base-pipeline leakage sentinel checks only
   the scaler mean; a winsor-caps or imputer-median leak regression would stay green. Thinner than the
   "one test per leakage path" narrative. **CONFIRMED**
-- **REV-25** `models/2026*` — committed stale run dirs whose metadata lists a feature
-  (`logically_inconsistent`) that no longer exists; `load_run` on one would crash at scoring. Live
-  path safe (mtime-latest run matches code). Prune or .gitignore old runs. **CONFIRMED**
+- **REV-25** `models/2026*` — stale LOCAL run dirs (correction: `models/` was never git-tracked —
+  already ignored) whose metadata lists a feature (`logically_inconsistent`) that no longer exists;
+  `load_run` on one would crash at scoring. Live path safe (mtime-latest run matches code).
+  *Resolved: the four stale dirs pruned locally.* **CONFIRMED (downgraded)**
 - **REV-26** [LOCKED] `src/churn/instrument/measure.py:138-148` — provenance records sklearn/numpy/
   pandas versions but not **duckdb**, which computes every PIT feature. **CONFIRMED**
 - **REV-27** [LOCKED] `measure.py:61-67` — the 1e-10 predictions hash implies cross-platform
