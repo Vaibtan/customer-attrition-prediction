@@ -27,6 +27,11 @@ ENV PYTHONUNBUFFERED=1
 # store; baking one in is the right call for a self-contained demo.)
 RUN python -m churn.train
 
+# Serve as a non-root user (REV-16). The baked model + code are root-owned but world-readable;
+# the API only reads at runtime, so no chown is needed.
+RUN useradd --system --uid 10001 --create-home appuser
+USER appuser
+
 EXPOSE 8000
 
 CMD ["uvicorn", "api.serve:app", "--host", "0.0.0.0", "--port", "8000"]

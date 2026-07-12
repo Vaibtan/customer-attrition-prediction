@@ -13,6 +13,10 @@ RUN uv sync --extra dashboard
 
 COPY services ./services
 
+# Non-root runtime (REV-16). --create-home gives Streamlit a writable ~/.streamlit.
+RUN useradd --system --uid 10001 --create-home appuser
+USER appuser
+
 ENV PATH="/opt/venv/bin:${PATH}"
 EXPOSE 8501
 

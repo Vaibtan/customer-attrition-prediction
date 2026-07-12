@@ -21,5 +21,11 @@ RUN uv sync --all-extras --all-groups
 
 ENV PATH="/opt/venv/bin:${PATH}"
 
+# Non-root runtime (REV-16, closes the REV-29 note about a root-running container over the
+# read-only repo bind mount). --create-home gives pytest/plugins a writable ~/.cache; the
+# no:cacheprovider default keeps pytest from wanting to write into the read-only /app.
+RUN useradd --system --uid 10001 --create-home appuser
+USER appuser
+
 # Default: the real-infra suite. `docker compose run --rm test-runner pytest ...` overrides freely.
 CMD ["pytest", "-m", "integration", "-p", "no:cacheprovider", "-v"]

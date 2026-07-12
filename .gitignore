@@ -14,3 +14,8 @@ Thumbs.db
 
 # Git Bash crash artifacts
 *.stackdump
+# Local compose secrets (see .env.example)
+.env
+
+# Local compose secrets (see .env.example)
+.env

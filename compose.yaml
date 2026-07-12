@@ -23,6 +23,8 @@ services:
       - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
     ports:
       - "9092:9092"
+    restart: unless-stopped
+    mem_limit: 1g
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     healthcheck:
@@ -37,6 +39,8 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    restart: unless-stopped
+    mem_limit: 256m
     volumes:
       - redis-data:/data
     healthcheck:
@@ -88,6 +92,8 @@ services:
       CHURN_AS_OF: "2025-01-01T00:00:00"
       CHURN_STATE_DIR: "/var/lib/quix-state"
       CONSUMER_TIMEOUT: "0"
+    restart: unless-stopped
+    mem_limit: 512m
     # Persist Quix's per-customer state across restarts. Correctness is guaranteed by the changelog
     # (use_changelog_topics=True) even if this is lost; the volume just avoids a full changelog
     # replay on a routine restart. See services/consumer/app.py::run_consumer.
@@ -107,6 +113,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    restart: unless-stopped
+    mem_limit: 1g
     profiles: ["serve"]
 
   # --- ONLINE scoring API (ADR 0006): follows the MLflow @champion alias. Redis is a hard
@@ -119,6 +127,8 @@ services:
       dockerfile: infra/Dockerfile.online
     ports:
       - "8001:8001"
+    restart: unless-stopped
+    mem_limit: 1g
     environment:
       REDIS_URL: "redis://redis:6379/0"
       MLFLOW_TRACKING_URI: "http://mlflow:5000"
@@ -136,15 +146,21 @@ services:
       - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
+    restart: unless-stopped
+    mem_limit: 512m
     profiles: ["observability"]
 
   grafana:
     image: grafana/grafana:11.2.0
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      # No committed literal (REV-16): set GRAFANA_ADMIN_PASSWORD in an untracked .env
+      # (see .env.example) before bringing the observability profile up.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env (see .env.example)}
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
       - "3000:3000"
+    restart: unless-stopped
+    mem_limit: 512m
     depends_on:
       - prometheus
     volumes:
@@ -160,6 +176,9 @@ services:
       dockerfile: infra/Dockerfile.dashboard
     ports:
       - "8501:8501"
+    restart: unless-stopped
+    # The mission-control render path runs the full backtest (REV-20); needs headroom.
+    mem_limit: 2g
     profiles: ["dashboard"]
 
   # --- Orchestration (Phase 5): the real Dagster code location (assets + jobs + the weekly
@@ -170,6 +189,8 @@ services:
       dockerfile: infra/Dockerfile.dagster
     ports:
       - "3001:3000"
+    restart: unless-stopped
+    mem_limit: 1g
     volumes:
       - dagster-home:/opt/dagster
     profiles: ["orchestration"]
@@ -181,6 +202,9 @@ services:
       dockerfile: infra/Dockerfile.mlflow
     ports:
       - "5000:5000"
+    restart: unless-stopped
+    # MLflow 3.x runs multiple uvicorn workers; 512m OOM-kills them in a loop.
+    mem_limit: 1g
     volumes:
       - mlflow-data:/mlflow
     healthcheck:

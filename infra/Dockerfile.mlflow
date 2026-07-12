@@ -4,13 +4,20 @@
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 RUN uv pip install --system "mlflow==3.14.0"
-RUN mkdir -p /mlflow/artifacts
+
+# Non-root runtime (REV-16). /mlflow is a named volume (sqlite DB + artifacts); image-side
+# ownership is inherited on first use. Pre-existing root-owned volumes need a `down -v` reset.
+RUN mkdir -p /mlflow/artifacts \
+    && useradd --system --uid 10001 --create-home mlflow && chown -R mlflow /mlflow
+USER mlflow
 EXPOSE 5000
 
 # --allowed-hosts: MLflow 3.x rejects unknown Host headers (DNS-rebinding protection). Allow the
 # in-network name (mlflow:5000) + localhost for host-mapped access. Scoped, not "*".
+# --workers 1: the 3.x default spawns 4 uvicorn workers, each importing the full server -- that
+# OOM-loops under the compose mem_limit, and a demo registry needs exactly one.
 CMD ["mlflow", "server", \
-     "--host", "0.0.0.0", "--port", "5000", \
+     "--host", "0.0.0.0", "--port", "5000", "--workers", "1", \
      "--backend-store-uri", "sqlite:////mlflow/mlflow.db", \
      "--artifacts-destination", "/mlflow/artifacts", \
      "--allowed-hosts", "mlflow:*,localhost:*,127.0.0.1:*"]

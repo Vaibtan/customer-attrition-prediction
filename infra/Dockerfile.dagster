@@ -16,6 +16,11 @@ RUN uv sync --extra orchestration --no-dev && mkdir -p /opt/dagster
 
 COPY orchestration ./orchestration
 
+# Non-root runtime (REV-16). DAGSTER_HOME is a named volume; image-side ownership is inherited
+# by the volume on first use.
+RUN useradd --system --uid 10001 --create-home appuser && chown appuser /opt/dagster
+USER appuser
+
 ENV PATH="/opt/venv/bin:${PATH}"
 EXPOSE 3000
 

@@ -41,11 +41,20 @@
 >   scrape target, log_model-returned version) · **REV-02** (label horizon + trigger-comparison
 >   centerpiece + blindspot chart) · **REV-03** (cron → unpartitioned retrain job, tick test,
 >   real Dagster service on 3001) · **REV-20** (st.cache_data).
+> - **REV-16** (hardening bundle): non-root `USER` (uid 10001) in all 7 images, with the write
+>   surfaces owned explicitly (online `monitoring/`, Quix state dir, DAGSTER_HOME, `/mlflow` —
+>   named volumes inherit image-side ownership on first use; pre-existing root-owned volumes
+>   need a `down -v` reset); `restart: unless-stopped` + `mem_limit` on every long-running
+>   service (MLflow pinned to `--workers 1` — the 3.x 4-worker default OOM-loops under a
+>   limit); Grafana password moved to an untracked `.env` (`${GRAFANA_ADMIN_PASSWORD:?}`, no
+>   committed literal, `.env.example` documents it, CI generates one per run); CI permissions
+>   now least-privilege (top-level `contents: read`, `packages: write` scoped to the `docker`
+>   job) and every job has `timeout-minutes`. Verified: all 8 images rebuilt, full live-infra
+>   sweep 8/8 green as uid 10001.
 >
-> **STILL OPEN:** REV-16 (container/CI hardening bundle: non-root USER, restart policies,
-> Grafana password, CI permissions/timeouts), REV-19/21/22/24/30 (deferred lows), the locked
-> tier (REV-01/06/07/26/27 — rides the next re-lock), and architecture items 4 (alert rules +
-> runbook), 6 (batch scoring as a scheduled asset), 7 (model card), 8 (authn/trust boundary).
+> **STILL OPEN:** REV-19/21/22/24/30 (deferred lows), the locked tier (REV-01/06/07/26/27 —
+> rides the next re-lock), and architecture items 4 (alert rules + runbook), 6 (batch scoring
+> as a scheduled asset), 7 (model card), 8 (authn/trust boundary).
 
 ---
 

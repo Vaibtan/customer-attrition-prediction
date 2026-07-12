@@ -15,6 +15,12 @@ RUN uv sync --extra streaming --extra featurestore
 
 COPY services ./services
 
+# Non-root runtime (REV-16). The consumer persists Quix state under CHURN_STATE_DIR; owning the
+# directory in the image means the named volume inherits that ownership on first use.
+RUN useradd --system --uid 10001 --create-home appuser \
+    && mkdir -p /var/lib/quix-state && chown appuser /var/lib/quix-state
+USER appuser
+
 ENV PATH="/opt/venv/bin:${PATH}"
 
 # Default to the consumer; the compose `producer` service overrides `command`.

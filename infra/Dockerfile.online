@@ -15,6 +15,12 @@ RUN uv sync --extra serve --extra featurestore --extra tracking --no-dev
 
 COPY api ./api
 
+# Non-root runtime (REV-16). The shadow challenger appends to monitoring/shadow_scores.jsonl
+# (settings.shadow_log_path), so that one directory must be writable by the runtime user.
+RUN useradd --system --uid 10001 --create-home appuser \
+    && mkdir -p /app/monitoring && chown appuser /app/monitoring
+USER appuser
+
 ENV PATH="/opt/venv/bin:${PATH}"
 EXPOSE 8001
 
