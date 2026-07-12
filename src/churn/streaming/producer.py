@@ -13,11 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 
 import pandas as pd
+
+from churn.settings import Settings
 
 # The wire schema (JSON). Event time is int64 ns; ``value`` is a float or null (missing magnitude).
 EVENT_FIELDS: tuple[str, ...] = ("event_id", "customer_id", "event_ts_ns", "event_type", "value")
@@ -94,11 +95,11 @@ def produce_events(
 
 def main(argv: list[str] | None = None) -> None:
     """CLI for the compose ``producer`` service: replay a parquet event log to a topic."""
+    settings = Settings.from_env()
     parser = argparse.ArgumentParser(description="Replay an event log to a Redpanda topic.")
-    parser.add_argument("--broker", default=os.getenv("REDPANDA_BROKER", "localhost:9092"))
-    parser.add_argument("--topic", default=os.getenv("EVENTS_TOPIC", "customer-events"))
-    default_events = os.getenv("EVENTS_PARQUET", "data/stream/events.parquet")
-    parser.add_argument("--events", default=default_events)
+    parser.add_argument("--broker", default=settings.redpanda_broker)
+    parser.add_argument("--topic", default=settings.events_topic)
+    parser.add_argument("--events", default=settings.events_parquet)
     args = parser.parse_args(argv)
 
     events = pd.read_parquet(Path(args.events))

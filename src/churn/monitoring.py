@@ -201,9 +201,10 @@ def build_drift_report(
             "",
             "## Alert Guide",
             "",
-            "- PSI < 0.10: stable.",
-            "- PSI 0.10-0.20: watch.",
-            "- PSI > 0.20: investigate before trusting campaign decisions.",
+            f"- PSI < {config.PSI_WATCH:.2f}: stable.",
+            f"- PSI {config.PSI_WATCH:.2f}-{config.PSI_INVESTIGATE:.2f}: watch.",
+            f"- PSI > {config.PSI_INVESTIGATE:.2f}: investigate before trusting campaign"
+            " decisions.",
         ]
     )
     return "\n".join(lines) + "\n"

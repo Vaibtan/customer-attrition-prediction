@@ -74,6 +74,12 @@ TEST_SIZE = 0.2
 CV_FOLDS = 5
 CV_REPEATS = 3
 
+# --- Monitoring policy (ISS-11: one source for the PSI bands) ----------------------------------
+# The classic PSI ladder; referenced by BOTH drift.detectors (alarm threshold) and the
+# monitoring-report Alert Guide so the prose can never disagree with the alarm again.
+PSI_WATCH = 0.10  # PSI in [WATCH, INVESTIGATE): distribution moving, keep an eye on it
+PSI_INVESTIGATE = 0.20  # PSI > this: investigate before trusting campaign decisions
+
 # --- Promotion policy (ENHANCEMENT_PLAN.md Sec 4.8) -------------------------------------------
 # A challenger is promoted only if BOTH paired lower bounds (ROC-AUC and PR-AUC) exceed the MDE
 # (not merely > 0), and every guardrail passes; the incumbent wins ties. EV is sensitivity only.

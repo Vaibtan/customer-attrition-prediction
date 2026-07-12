@@ -29,7 +29,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from churn import config, monitoring
 
-PSI_THRESHOLD = 0.2  # PSI > 0.2 is the classic "investigate" band
+PSI_THRESHOLD = config.PSI_INVESTIGATE  # single source: the classic "investigate" band (ISS-11)
 KS_ALPHA = 0.05
 CHI2_ALPHA = 0.05
 DOMAIN_AUC_ALARM = 0.65  # domain classifier this discriminative => covariate shift
@@ -133,9 +133,15 @@ def detect_drift(
 ) -> DriftReport:
     """Type-aware per-feature drift + a domain-classifier covariate-shift alarm."""
     if numeric_features is None and categorical_features is None:
-        is_num = pd.api.types.is_numeric_dtype
-        numeric_features = [c for c in reference.columns if is_num(reference[c])]
-        categorical_features = [c for c in reference.columns if c not in numeric_features]
+        # Declared schema first (ISS-11): columns the churn config knows get their DECLARED type
+        # (a numerically-coded categorical must not sniff as numeric); only columns outside the
+        # schema (e.g. the backtest's synthetic f0/f1/f2) fall back to dtype sniffing.
+        declared_num = [c for c in reference.columns if c in config.BASE_NUMERIC]
+        declared_cat = [c for c in reference.columns if c in config.CATEGORICAL_FEATURES]
+        rest = [c for c in reference.columns if c not in declared_num + declared_cat]
+        sniffed_num = [c for c in rest if pd.api.types.is_numeric_dtype(reference[c])]
+        numeric_features = declared_num + sniffed_num
+        categorical_features = declared_cat + [c for c in rest if c not in sniffed_num]
     numeric_features = numeric_features or []
     categorical_features = categorical_features or []
 

@@ -13,8 +13,6 @@ work (read Redis by ``customer_id``, 404 on a cache miss, merge the request's st
 
 from __future__ import annotations
 
-import os
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -22,6 +20,7 @@ from api.scoring_app import scoring_app
 from churn.featurestore.online import OnlineStore
 from churn.instrument import model as M
 from churn.serving.online_model import OnlineScorer, load_online_model
+from churn.settings import Settings
 
 
 class OnlineScoreRequest(BaseModel):
@@ -50,8 +49,9 @@ def _static_attrs(req: OnlineScoreRequest) -> dict[str, object]:
 
 
 def create_online_app(run_dir: str | None = None, redis_url: str | None = None) -> FastAPI:
-    run_dir = run_dir or os.getenv("CHURN_ONLINE_MODEL_RUN_DIR")
-    redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    settings = Settings.from_env()
+    run_dir = run_dir or settings.online_model_run_dir
+    redis_url = redis_url or settings.redis_url
     store = OnlineStore.from_url(redis_url)
 
     def _score_online(scorer: OnlineScorer, req: OnlineScoreRequest) -> OnlineScoreResponse:

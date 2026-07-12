@@ -7,7 +7,6 @@ owns the batch-specific work (build a one-row frame, validate it, score, report 
 
 from __future__ import annotations
 
-import os
 from dataclasses import asdict
 
 import pandas as pd
@@ -18,6 +17,7 @@ from api.scoring_app import scoring_app
 from churn import config, registry
 from churn.data import validate_schema
 from churn.scoring import ScoredCustomer
+from churn.settings import Settings
 
 
 class CustomerPayload(BaseModel):
@@ -61,7 +61,7 @@ def _score_batch(loaded, payload: CustomerPayload) -> ScoreResponse:
 
 
 def create_app(run_dir: str | None = None) -> FastAPI:
-    key = run_dir or os.getenv("CHURN_MODEL_RUN_DIR")
+    key = run_dir or Settings.from_env().model_run_dir
     return scoring_app(
         title="Customer Churn Scoring Demo",
         description="Demo API; batch scoring is the primary workflow.",

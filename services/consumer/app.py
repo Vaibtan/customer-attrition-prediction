@@ -17,15 +17,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 
 import pandas as pd
 
 from churn.featurestore.online import OnlineStore
+from churn.settings import Settings
 from churn.streaming import aggregate as AGG
-
-DEFAULT_TOPIC = "customer-events"
-DEFAULT_GROUP = "churn-streaming-v1"
 
 
 def _ts_extractor(value: dict, headers: object, timestamp: int, timestamp_type: object) -> int:
@@ -74,7 +71,7 @@ def run_consumer(
     from quixstreams.state import State
 
     t0 = pd.Timestamp(t0)
-    state_dir = state_dir or os.getenv("CHURN_STATE_DIR", "/tmp/quix-state")
+    state_dir = state_dir or Settings.from_env().state_dir
     app = Application(
         broker_address=broker,
         consumer_group=consumer_group,
@@ -120,13 +117,14 @@ def run_consumer(
 
 def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint for the compose ``consumer`` service."""
+    settings = Settings.from_env()
     parser = argparse.ArgumentParser(description="Stream events -> Redis online features.")
-    parser.add_argument("--broker", default=os.getenv("REDPANDA_BROKER", "localhost:9092"))
-    parser.add_argument("--topic", default=os.getenv("EVENTS_TOPIC", DEFAULT_TOPIC))
-    parser.add_argument("--group", default=os.getenv("CONSUMER_GROUP", DEFAULT_GROUP))
-    parser.add_argument("--redis-url", default=os.getenv("REDIS_URL", "redis://localhost:6379/0"))
-    parser.add_argument("--as-of", default=os.getenv("CHURN_AS_OF", "2025-01-01T00:00:00"))
-    parser.add_argument("--timeout", type=float, default=float(os.getenv("CONSUMER_TIMEOUT", "0")))
+    parser.add_argument("--broker", default=settings.redpanda_broker)
+    parser.add_argument("--topic", default=settings.events_topic)
+    parser.add_argument("--group", default=settings.consumer_group)
+    parser.add_argument("--redis-url", default=settings.redis_url)
+    parser.add_argument("--as-of", default=settings.as_of)
+    parser.add_argument("--timeout", type=float, default=settings.consumer_timeout)
     args = parser.parse_args(argv)
 
     store = build_online_store(args.redis_url)
