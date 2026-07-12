@@ -21,6 +21,34 @@
 
 ---
 
+## 0. Resolution status (build session 2026-07-12)
+
+> Design tier grilled first (`grill-with-docs`, all nine decisions → **ADR 0006/0007** +
+> `CONTEXT.md`), then built in 8 commits, each green on the full host suite; live-infra sweep at
+> the end of the session.
+>
+> **RESOLVED & COMMITTED:**
+> - Quick wins: **REV-09** (inf 422s) · **REV-12** (route-template labels + uncaught-500
+>   counting) · **REV-28** (locked cache) · **REV-15** (Dockerfile layers) · **REV-18** (MIT
+>   LICENSE) · **REV-29** (.dockerignore) · **REV-23** (WRITEUP 11→10) · **REV-25** (stale local
+>   runs pruned; finding corrected — `models/` was never git-tracked) · **REV-17** (ci.yml
+>   marker filter, infra/README, MLflow pin sync-guard test, drift report regenerated).
+> - Design slices: **A2/ISS-11** (`churn.settings.Settings` + PSI bands + declared-schema
+>   partition) · **ADR 0007 / REV-04/05/11** (versioned envelope, strict 409 reader, NaN-proof
+>   writes, aligned dedup + AVG semantics, new parity cases) · **ADR 0006 / REV-10/13/14**
+>   (ChampionResolver TTL cutover + serve-last-good, shadow @challenger JSONL log + counter,
+>   ok|degraded|stale health with reasons + version-skew warnings, `api-online:8001` service +
+>   scrape target, log_model-returned version) · **REV-02** (label horizon + trigger-comparison
+>   centerpiece + blindspot chart) · **REV-03** (cron → unpartitioned retrain job, tick test,
+>   real Dagster service on 3001) · **REV-20** (st.cache_data).
+>
+> **STILL OPEN:** REV-16 (container/CI hardening bundle: non-root USER, restart policies,
+> Grafana password, CI permissions/timeouts), REV-19/21/22/24/30 (deferred lows), the locked
+> tier (REV-01/06/07/26/27 — rides the next re-lock), and architecture items 4 (alert rules +
+> runbook), 6 (batch scoring as a scheduled asset), 7 (model card), 8 (authn/trust boundary).
+
+---
+
 ## Verdict in one paragraph
 
 The platform is fundamentally sound: no live correctness bug was found in a deployed happy path, the

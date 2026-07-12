@@ -36,9 +36,14 @@
 > suite green; ruff clean. Two backlog nuances corrected: ISS-07 docstrings also differed; ISS-08 is a
 > **2-way** dup (`timeline.py` ≡ `test_retrain.py`), not "×3" — `replay._window` left alone.
 >
-> **Remaining open (deferred by decision, not bugs):** ISS-11 (P3 config), ISS-12 (P4 cbpe O(n)),
-> ISS-14 (P4 Redis write amp — **grill the semantic tradeoffs first**); ISS-15..18 (P5 locked, need a
-> re-lock). All P0/P1/P2 commits pushed to `origin/enhancement`.
+> **Remaining open (deferred by decision, not bugs):** ISS-12 (P4 cbpe O(n)), ISS-14 (P4 Redis
+> write amp — **grill the semantic tradeoffs first**); ISS-15..18 (P5 locked, need a re-lock).
+>
+> **Update — 2026-07-12: ISS-11 RESOLVED** as part of the REVIEW_ISSUES.md build session (see
+> that file's §0): PSI bands centralized in `config.py` (PSI_WATCH/PSI_INVESTIGATE, referenced by
+> both `detectors.PSI_THRESHOLD` and the Alert Guide prose) and `detect_drift`'s default
+> partition now prefers the declared schema over dtype sniffing. Runtime/infra config got its own
+> typed home (`churn.settings.Settings`); policy deliberately stays in `config.py`.
 
 These 4 mechanical fixes are **applied to the working tree (uncommitted)** and left the suite green
 (host `pytest` pass, `ruff check`/`format` clean, `docker compose config` valid):

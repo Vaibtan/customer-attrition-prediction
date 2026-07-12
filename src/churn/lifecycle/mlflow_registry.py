@@ -52,7 +52,15 @@ def log_and_register(
     experiment_id = _ensure_experiment(client, experiment, artifact_location)
     with mlflow.start_run(experiment_id=experiment_id):
         mlflow.log_metrics(metrics)
-        info = mlflow.sklearn.log_model(model, name="model", registered_model_name=name)
+        # serialization_format pinned: MLflow 3.x defaults the sklearn flavor to skops, whose
+        # trusted-types allowlist rejects real pipelines (ColumnTransformer internals carry
+        # numpy.dtype) at LOAD time -- the serving cutover would fail on the first resolve.
+        info = mlflow.sklearn.log_model(
+            model,
+            name="model",
+            registered_model_name=name,
+            serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE,
+        )
     version = str(info.registered_model_version)
     for key, value in (tags or {}).items():
         client.set_model_version_tag(name, version, key, value)
