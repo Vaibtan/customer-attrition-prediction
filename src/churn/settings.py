@@ -36,6 +36,9 @@ class Settings:
     model_run_dir: str | None = None
     online_model_run_dir: str | None = None
     mlflow_tracking_uri: str | None = None
+    mlflow_model_name: str = "churn-online"
+    champion_ttl_seconds: float = 60.0
+    shadow_log_path: str = "monitoring/shadow_scores.jsonl"
 
     # Explicit env names: several predate this module (compose/CI reference them), so they are a
     # contract -- do not derive them from field names.
@@ -51,8 +54,11 @@ class Settings:
         "model_run_dir": "CHURN_MODEL_RUN_DIR",
         "online_model_run_dir": "CHURN_ONLINE_MODEL_RUN_DIR",
         "mlflow_tracking_uri": "MLFLOW_TRACKING_URI",
+        "mlflow_model_name": "MLFLOW_MODEL_NAME",
+        "champion_ttl_seconds": "CHAMPION_TTL_SECONDS",
+        "shadow_log_path": "SHADOW_LOG_PATH",
     }
-    _CAST: ClassVar[dict[str, type]] = {"consumer_timeout": float}
+    _CAST: ClassVar[dict[str, type]] = {"consumer_timeout": float, "champion_ttl_seconds": float}
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:

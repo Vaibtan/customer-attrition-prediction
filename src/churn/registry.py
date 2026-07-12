@@ -93,12 +93,15 @@ class LoadedModel:
     """A loaded run that owns its own cutpoints + base linear and can score a frame.
 
     Callers used to receive a raw (model, meta, base) tuple and each re-reach into
-    meta["tier_cutpoints"] before scoring; that key path now lives here alone.
+    meta["tier_cutpoints"] before scoring; that key path now lives here alone. ``warnings``
+    carries non-fatal load diagnostics (currently: recorded-vs-runtime library version skew --
+    the metadata always recorded the versions, now they are actually checked; REV-10).
     """
 
     model: object
     metadata: dict
     base_linear: object | None
+    warnings: tuple[str, ...] = ()
 
     @property
     def run_id(self) -> str | None:
@@ -118,9 +121,23 @@ class LoadedModel:
         )
 
 
+def _version_warnings(metadata: dict) -> tuple[str, ...]:
+    current = {
+        "scikit_learn": sklearn.__version__,
+        "pandas": pd.__version__,
+        "numpy": np.__version__,
+    }
+    recorded = metadata.get("versions") or {}
+    return tuple(
+        f"{lib} version skew: artifact {rec}, runtime {current[lib]}"
+        for lib, rec in recorded.items()
+        if lib in current and current[lib] != rec
+    )
+
+
 def load_run(run_dir=None) -> LoadedModel:
     run_dir = Path(run_dir) if run_dir is not None else latest_run_dir()
     model = joblib.load(run_dir / PIPELINE_FILE)
     metadata = json.loads((run_dir / METADATA_FILE).read_text())
     base = joblib.load(run_dir / BASE_FILE) if (run_dir / BASE_FILE).exists() else None
-    return LoadedModel(model, metadata, base)
+    return LoadedModel(model, metadata, base, warnings=_version_warnings(metadata))

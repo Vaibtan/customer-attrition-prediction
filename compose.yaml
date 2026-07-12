@@ -98,13 +98,30 @@ services:
         condition: service_healthy
     profiles: ["streaming"]
 
-  # --- On-demand scoring API (Phase 3): FastAPI /score, existing Dockerfile ---
+  # --- On-demand BATCH scoring API (Phase 3): pinned baked-in model, self-contained image ---
   api:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    profiles: ["serve"]
+
+  # --- ONLINE scoring API (ADR 0006): follows the MLflow @champion alias. Redis is a hard
+  # dependency (the feature envelopes); MLflow is deliberately SOFT -- no depends_on, the app
+  # starts degraded and recovers via the lazy-TTL re-resolve when the tracking profile is up.
+  # Full online demo = `--profile serve --profile tracking --profile streaming`.
+  api-online:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.online
+    ports:
+      - "8001:8001"
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+      MLFLOW_MODEL_NAME: "churn-online"
+      CHURN_AS_OF: "2025-01-01T00:00:00"
     depends_on:
       redis:
         condition: service_healthy

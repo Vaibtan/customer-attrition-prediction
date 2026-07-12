@@ -140,3 +140,75 @@ def test_online_score_equals_offline_batch_score(
     )
     assert conflict.status_code == 409
     assert "schema mismatch" in conflict.json()["detail"]
+
+
+def test_champion_cutover_and_shadow_against_live_mlflow(mlflow_uri, tmp_path):
+    """ADR 0006 end-to-end on a real tracking server: the app follows @champion (promotion IS
+    the cutover), health reports alias provenance, and @challenger shadow-scores post-response."""
+    import json as _json  # noqa: PLC0415
+
+    from churn.featurestore.online import OnlineStore  # noqa: PLC0415
+    from churn.lifecycle import mlflow_registry as MR  # noqa: PLC0415
+    from churn.serving.champion import mlflow_alias_resolver  # noqa: PLC0415
+    from churn.serving.shadow import ShadowScorer  # noqa: PLC0415
+    from churn.streaming import aggregate as AGG  # noqa: PLC0415
+
+    ds = G.build_population_dataset(P.load_params(), seed=4242, n_synthetic=0)
+    ids = _cohort_with_events_and_static(ds, 3)
+    events = ds.events[ds.events["customer_id"].isin(ids)]
+
+    train_ids = ds.customers["customer_id"].head(500).tolist()
+    train_pit = OFF.compute_pit_features(ds.events, make_cohort(train_ids, T0))
+    model = OM.train_online_model(ds, train_pit, seed=42)
+    name = f"churn-online-it-{tmp_path.name.lower()}"
+    tags = {"tier_cutpoints": _json.dumps(model.cutpoints)}
+
+    v1 = MR.log_and_register(model.pipeline, name, {"roc_auc": 0.7}, mlflow_uri, tags=tags)
+    MR.set_alias(name, MR.CHAMPION, v1, mlflow_uri)
+    MR.set_alias(name, MR.CHALLENGER, v1, mlflow_uri)  # shadow scores with v1 too
+
+    store = OnlineStore()  # local backend: this test isolates the MLflow leg
+    store.put_many(AGG.aggregate_stream(events, {c: T0 for c in ids}), as_of=T0)
+
+    shadow_log = tmp_path / "shadow.jsonl"
+    app = create_online_app(
+        as_of=str(T0),
+        store=store,
+        resolver=mlflow_alias_resolver(name, MR.CHAMPION, mlflow_uri, ttl_seconds=0.0),
+        shadow=ShadowScorer(
+            mlflow_alias_resolver(name, MR.CHALLENGER, mlflow_uri, ttl_seconds=0.0), shadow_log
+        ),
+    )
+    client = TestClient(app)
+
+    health = client.get("/health").json()
+    assert health["status"] == "ok"
+    assert health["run_id"] == f"{name}@v{v1}"
+    assert health["alias_version"] == v1
+
+    stat = ds.customers.set_index("customer_id")
+    c = ids[0]
+    payload = {
+        "customer_id": c,
+        "region": stat.loc[c, "region"],
+        "device_type": stat.loc[c, "device_type"],
+        "subscription_plan": stat.loc[c, "subscription_plan"],
+        "account_age_days": _num(stat.loc[c, "account_age_days"]),
+        "monthly_spend": _num(stat.loc[c, "monthly_spend"]),
+        "avg_order_value": _num(stat.loc[c, "avg_order_value"]),
+    }
+    resp = client.post("/score/online", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["model_run_id"] == f"{name}@v{v1}"
+
+    # TestClient runs background tasks before returning: the shadow record is already on disk.
+    record = _json.loads(shadow_log.read_text().splitlines()[-1])
+    assert record["customer_id"] == c
+    assert record["challenger_run_id"] == f"{name}@v{v1}"
+    assert record["champion_probability"] == pytest.approx(resp.json()["churn_probability"])
+
+    # Promotion IS the cutover: register v2, move @champion, the next request serves it.
+    v2 = MR.log_and_register(model.pipeline, name, {"roc_auc": 0.8}, mlflow_uri, tags=tags)
+    MR.promote(name, v2, mlflow_uri)
+    assert client.post("/score/online", json=payload).json()["model_run_id"] == f"{name}@v{v2}"
+    assert client.get("/health").json()["alias_version"] == v2

@@ -3,6 +3,8 @@
 Deployment infrastructure, referenced by `compose.yaml` at the repo root:
 
 - `Dockerfile.streaming` — producer + Quix consumer image (streaming profile).
+- `Dockerfile.online` — the alias-following online scoring API (`api-online:8001`, ADR 0006); no
+  baked model on purpose — it resolves the MLflow `@champion`.
 - `Dockerfile.mlflow` — MLflow tracking + model-registry server (sqlite backend, proxied
   artifacts). The `mlflow==` pin must match `uv.lock`'s client version — guarded by
   `tests/test_observability_config.py`.

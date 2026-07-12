@@ -16,10 +16,14 @@ def test_grafana_dashboard_json_is_valid_and_uses_our_metrics():
     assert any("churn_http_request_duration_seconds_bucket" in e for e in exprs)
 
 
-def test_prometheus_scrapes_the_scoring_api():
+def test_prometheus_scrapes_both_scoring_apis():
     text = (ROOT / "infra/prometheus.yml").read_text()
     assert "churn-api" in text
     assert "api:8000" in text
+    # ADR 0006: the online app is a real compose service now -- its service label must be able
+    # to exist (the old config scraped batch only, so `online-scoring` could never appear).
+    assert "churn-api-online" in text
+    assert "api-online:8001" in text
 
 
 def test_mlflow_server_pin_matches_the_client_lock():

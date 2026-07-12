@@ -1,0 +1,21 @@
+# Online scoring API (ADR 0006): follows the MLflow @champion alias -- deliberately NO baked
+# model (contrast with the root Dockerfile's self-contained batch image; the asymmetry is the
+# design). Needs serve (fastapi/uvicorn/prometheus) + featurestore (redis client, and duckdb via
+# the offline feature spec the schema hash derives from) + tracking (mlflow client).
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --extra serve --extra featurestore --extra tracking --no-dev
+
+COPY api ./api
+
+ENV PATH="/opt/venv/bin:${PATH}"
+EXPOSE 8001
+
+CMD ["uvicorn", "api.online:app", "--host", "0.0.0.0", "--port", "8001"]

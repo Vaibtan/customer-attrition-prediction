@@ -50,7 +50,7 @@ def payload_dict(payload: CustomerPayload) -> dict:
     return payload.dict()
 
 
-def _score_batch(loaded, payload: CustomerPayload) -> ScoreResponse:
+def _score_batch(loaded, payload: CustomerPayload, _tasks=None) -> ScoreResponse:
     row = payload_dict(payload)
     if row.get(config.ID_COL) is None:
         row[config.ID_COL] = "api-request"

@@ -8,8 +8,15 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # The FastAPI scoring service exposes churn_http_* metrics at /metrics (Phase 6).
+  # The FastAPI scoring services expose churn_http_* metrics at /metrics (Phase 6). NOTE: these
+  # services live in the `serve` profile -- run `--profile serve --profile observability` for
+  # live panels (a lone observability profile scrapes nothing).
   - job_name: churn-api
     metrics_path: /metrics
     static_configs:
       - targets: ["api:8000"]
+
+  - job_name: churn-api-online
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api-online:8001"]
