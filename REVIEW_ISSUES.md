@@ -51,10 +51,18 @@
 >   now least-privilege (top-level `contents: read`, `packages: write` scoped to the `docker`
 >   job) and every job has `timeout-minutes`. Verified: all 8 images rebuilt, full live-infra
 >   sweep 8/8 green as uid 10001.
+> - Deferred lows: **REV-19** (concept_drift_suspected docstring + dashboard caption state the
+>   band is sampling variance only — a miss can be plain calibration failure) · **REV-21**
+>   (empty bootstrap → NaN bands, `diff_lo > mde` fails CLOSED; degenerate single-class tests
+>   at the evaluate and gate levels) · **REV-22** (producer delivery-report callback: returns
+>   the ACKED count under flush, raises on failed delivery, BufferError blocks on poll; 4 fake-
+>   Producer unit tests) · **REV-24** (leakage sentinel now asserts winsor caps + imputer
+>   medians are subset-specific, one test per fitted statistic). **REV-30** stands as recorded
+>   INFO — monotone-invariant AUC, no code change.
 >
-> **STILL OPEN:** REV-19/21/22/24/30 (deferred lows), the locked tier (REV-01/06/07/26/27 —
-> rides the next re-lock), and architecture items 4 (alert rules + runbook), 6 (batch scoring
-> as a scheduled asset), 7 (model card), 8 (authn/trust boundary).
+> **STILL OPEN:** the locked tier (REV-01/06/07/26/27 — rides the next re-lock), and
+> architecture items 4 (alert rules + runbook), 6 (batch scoring as a scheduled asset),
+> 7 (model card), 8 (authn/trust boundary).
 
 ---
 

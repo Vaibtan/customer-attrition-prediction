@@ -92,3 +92,13 @@ def test_segment_degradation_blocks_promotion(data):
     seg_guard = next(g for g in decision.guardrails if "segment" in g.name)
     assert seg_guard.passed is False
     assert decision.promote is False
+
+
+def test_degenerate_single_class_holdout_fails_closed():
+    """REV-21: a holdout where every bootstrap resample is single-class must reject, not throw."""
+    y = np.ones(60, dtype=int)
+    champion = np.full(60, 0.6)
+    challenger = np.full(60, 0.7)
+    decision = PROMO.evaluate_promotion(y, champion, challenger, n_rounds=20, seed=3)
+    assert decision.primary_passed is False  # NaN lower bounds never clear the MDE
+    assert decision.promote is False

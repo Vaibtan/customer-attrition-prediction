@@ -112,3 +112,19 @@ def test_threshold_sensitivity_break_even_and_shape():
     for r in rows:
         assert 0.0 <= r["t_star"] <= 1.0
         assert {"ev_target_per_1k", "ev_all_per_1k"} <= set(r)
+
+
+# --- degenerate single-class bootstrap (REV-21): NaN bands, never a raise ------------------------
+
+
+def test_single_class_bootstrap_returns_nan_band_instead_of_raising():
+    y = np.ones(30, dtype=int)  # every resample is single-class -> zero valid rounds
+    proba = np.linspace(0.1, 0.9, 30)
+    out = bootstrap_auc_ci(y, proba, n_rounds=20, seed=0)
+    assert out["n_rounds"] == 0
+    assert np.isnan(out["auc_lo"]) and np.isnan(out["auc_hi"])
+
+    band = bootstrap_diff_ci(y, proba, proba[::-1], n_rounds=20, seed=0)
+    for key in ("roc", "pr"):
+        assert band[key]["n_rounds"] == 0
+        assert np.isnan(band[key]["diff_lo"]) and np.isnan(band[key]["diff_mean"])

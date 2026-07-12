@@ -32,7 +32,9 @@ with left:
         "Labels for step t only arrive at t+h (stylized h=3): the monitor sees the dashed "
         "'revealed' line, never the red truth. CBPE stays optimistic through concept drift "
         "(blind by design); the lagged-label monitor retrains on the latest LABELED window "
-        "and recovers -- h steps after the decay actually happened."
+        "and recovers -- h steps after the decay actually happened. The CBPE band is sampling "
+        "variance only: a realized AUC outside it can also mean plain calibration failure, "
+        "not necessarily concept drift."
     )
 with right:
     st.subheader("Risk tiers")

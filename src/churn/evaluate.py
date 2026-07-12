@@ -138,13 +138,18 @@ def _bootstrap_metrics(
 
 
 def _quantile_band(values: np.ndarray, alpha: float) -> tuple[float, float]:
+    # Every resample can be single-class on a degenerate holdout (REV-21): report NaN instead of
+    # letting np.quantile raise on empty input -- NaN comparisons are False, so the promotion
+    # gate's `diff_lo > mde` fails CLOSED (no promotion) rather than throwing.
+    if values.size == 0:
+        return float("nan"), float("nan")
     return float(np.quantile(values, alpha / 2)), float(np.quantile(values, 1 - alpha / 2))
 
 
 def _diff_band(diffs: np.ndarray, alpha: float) -> dict:
     lo, hi = _quantile_band(diffs, alpha)
     return {
-        "diff_mean": float(diffs.mean()),
+        "diff_mean": float(diffs.mean()) if diffs.size else float("nan"),
         "diff_lo": lo,
         "diff_hi": hi,
         "n_rounds": int(diffs.size),

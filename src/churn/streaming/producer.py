@@ -74,23 +74,51 @@ def produce_events(
     *,
     flush: bool = True,
 ) -> int:
-    """Replay ``events`` to ``topic`` on ``broker``, keyed by ``customer_id``. Returns the count."""
+    """Replay ``events`` to ``topic`` on ``broker``, keyed by ``customer_id``.
+
+    With ``flush=True`` (default) the return value is the number of ACKNOWLEDGED events -- the
+    delivery reports are the truth, not the enqueue count -- and any failed delivery raises
+    ``RuntimeError`` (REV-22). With ``flush=False`` callbacks may still be pending, so the count
+    is only what was enqueued. A full local queue (``BufferError``) blocks on ``poll`` until
+    delivery reports free space instead of crashing.
+    """
     from confluent_kafka import Producer
 
     producer = Producer({"bootstrap.servers": broker})
+    acked = 0
+    failures: list[str] = []
+
+    def _on_delivery(err: object, _msg: object) -> None:
+        nonlocal acked
+        if err is None:
+            acked += 1
+        else:
+            failures.append(str(err))
+
     count = 0
     for record in iter_records(events):
         wire = to_wire(record)
-        producer.produce(
-            topic,
-            key=wire["customer_id"].encode("utf-8"),
-            value=_dumps_wire(wire),
-        )
+        while True:
+            try:
+                producer.produce(
+                    topic,
+                    key=wire["customer_id"].encode("utf-8"),
+                    value=_dumps_wire(wire),
+                    on_delivery=_on_delivery,
+                )
+                break
+            except BufferError:  # local queue full: serve callbacks until space frees up
+                producer.poll(1)
         count += 1
         producer.poll(0)  # serve delivery callbacks without blocking
-    if flush:
-        producer.flush()
-    return count
+    if not flush:
+        return count
+    producer.flush()
+    if failures:
+        raise RuntimeError(
+            f"{len(failures)}/{count} events failed delivery; first error: {failures[0]}"
+        )
+    return acked
 
 
 def main(argv: list[str] | None = None) -> None:

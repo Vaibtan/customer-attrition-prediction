@@ -61,5 +61,11 @@ def estimate(proba, n_rounds: int = 500, seed: int = 42, alpha: float = 0.05) ->
 
 
 def concept_drift_suspected(result: CBPEResult, realized_auc: float) -> bool:
-    """True when a realized (labeled) AUC falls outside the CBPE band -- the estimator was blind."""
+    """True when a realized (labeled) AUC falls outside the CBPE band -- the estimator was blind.
+
+    The bootstrap band captures SAMPLING variance only, so this flag also fires on plain
+    calibration failure (scores drifted away from calibrated probabilities with no change in the
+    feature -> label relationship). Read it as "CBPE was wrong here", not as proof that the miss
+    was concept drift specifically (REV-19).
+    """
     return not result.contains(realized_auc)
