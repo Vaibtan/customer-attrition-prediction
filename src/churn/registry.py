@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 
-from . import config
+from . import config, model_card
 
 PIPELINE_FILE = "pipeline.joblib"
 BASE_FILE = "base_linear.joblib"
@@ -77,6 +77,9 @@ def save_run(model, metadata: dict, base_model=None, base_dir=config.MODELS_DIR)
         **metadata,
     }
     (run_dir / METADATA_FILE).write_text(json.dumps(to_jsonable(full_meta), indent=2))
+    # Every run carries its own model card (architecture item 7): rendered from the same
+    # metadata, here rather than in callers so retrain jobs and tests get one for free.
+    (run_dir / model_card.MODEL_CARD_FILE).write_text(model_card.render(to_jsonable(full_meta)))
     return run_dir
 
 

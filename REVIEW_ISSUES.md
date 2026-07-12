@@ -59,10 +59,16 @@
 >   Producer unit tests) · **REV-24** (leakage sentinel now asserts winsor caps + imputer
 >   medians are subset-specific, one test per fitted statistic). **REV-30** stands as recorded
 >   INFO — monotone-invariant AUC, no code change.
+> - Architecture item 7 (model card): `churn.model_card` renders an honest per-run
+>   `MODEL_CARD.md` (intended use + synthetic-domain framing, provenance, bake-off honesty
+>   statistics, decision policy + EV sensitivity, limitations) from the registry metadata;
+>   `save_run` writes one into every run dir automatically, `python -m churn.model_card`
+>   backfills existing runs. Defensive rendering (missing keys → n/a, never a KeyError).
 >
 > **STILL OPEN:** the locked tier (REV-01/06/07/26/27 — rides the next re-lock), and
-> architecture items 4 (alert rules + runbook), 6 (batch scoring as a scheduled asset),
-> 7 (model card), 8 (authn/trust boundary).
+> architecture items 4 (alert rules + runbook — grill first), 6 (batch scoring as a scheduled
+> asset — design decision, grill first), 8 (authn vs trust-boundary ADR — design decision,
+> grill first).
 
 ---
 
