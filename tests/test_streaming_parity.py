@@ -91,6 +91,57 @@ def test_parity_under_duplicates():
     _assert_parity(dup, ["A"])
 
 
+def test_parity_with_null_valued_magnitude_events():
+    """REV-04: a null-valued login/support must count like COUNT(*) but stay out of the mean,
+    exactly like the offline AVG(e.value) skips SQL NULL -- one null must not poison the mean."""
+    events = _ev(
+        [
+            {
+                "event_id": "A:login:0",
+                "customer_id": "A",
+                "event_ts": T0 - pd.Timedelta(days=3),
+                "event_type": "login",
+                "value": 6.0,
+            },
+            {
+                "event_id": "A:login:1",
+                "customer_id": "A",
+                "event_ts": T0 - pd.Timedelta(days=5),
+                "event_type": "login",
+                "value": np.nan,  # null over the wire
+            },
+            {
+                "event_id": "A:sup:0",
+                "customer_id": "A",
+                "event_ts": T0 - pd.Timedelta(days=10),
+                "event_type": "support",
+                "value": np.nan,
+            },
+        ]
+    )
+    _assert_parity(events, ["A"])
+    # Pin the semantics explicitly, not just the parity: count=2, mean over the 1 valued login.
+    vec = AGG.aggregate_stream(events, {"A": T0})["A"]
+    assert vec["login_count_28d"] == 2.0
+    assert vec["mean_session_depth_28d"] == pytest.approx(6.0)
+    assert vec["mean_sentiment_90d"] == 0.0  # no valued support -> the empty-mean sentinel
+
+
+def test_parity_under_mutated_duplicates():
+    """REV-05: a redelivered event_id with a DIFFERENT payload must resolve first-wins in all
+    three implementations (offline drop_duplicates == recompute reducer == incremental path)."""
+    base = {
+        "event_id": "A:login:0",
+        "customer_id": "A",
+        "event_ts": T0 - pd.Timedelta(days=3),
+        "event_type": "login",
+    }
+    events = _ev([{**base, "value": 2.0}, {**base, "value": 8.0}])  # same id, mutated value
+    _assert_parity(events, ["A"])
+    vec = AGG.aggregate_stream(events, {"A": T0})["A"]
+    assert vec["mean_session_depth_28d"] == pytest.approx(2.0)  # first payload won
+
+
 def test_parity_under_late_and_post_t0_events():
     events = _ev(
         [

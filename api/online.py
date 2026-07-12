@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from api.scoring_app import scoring_app
-from churn.featurestore.online import OnlineStore
+from churn.featurestore.online import FeatureContractError, OnlineStore, validate_envelope
 from churn.instrument import model as M
 from churn.serving.online_model import OnlineScorer, load_online_model
 from churn.settings import Settings
@@ -48,19 +48,31 @@ def _static_attrs(req: OnlineScoreRequest) -> dict[str, object]:
     return {col: payload[col] for col in M.STATIC_FEATURES}
 
 
-def create_online_app(run_dir: str | None = None, redis_url: str | None = None) -> FastAPI:
+def create_online_app(
+    run_dir: str | None = None,
+    redis_url: str | None = None,
+    as_of: str | None = None,
+    store: OnlineStore | None = None,
+) -> FastAPI:
     settings = Settings.from_env()
     run_dir = run_dir or settings.online_model_run_dir
-    redis_url = redis_url or settings.redis_url
-    store = OnlineStore.from_url(redis_url)
+    as_of = as_of or settings.as_of
+    store = store if store is not None else OnlineStore.from_url(redis_url or settings.redis_url)
 
     def _score_online(scorer: OnlineScorer, req: OnlineScoreRequest) -> OnlineScoreResponse:
-        event = store.get(req.customer_id)
-        if event is None:
-            raise HTTPException(
-                status_code=404, detail=f"no online features for customer {req.customer_id!r}"
-            )
-        result = scorer.score(_static_attrs(req), event)
+        # Strict reader (ADR 0007): a parity score is real or refused. 404 = no vector at all;
+        # 409 = a vector exists but violates the contract (stale schema, wrong as_of, incomplete,
+        # or a pre-envelope blob) -- NEVER silently impute from a bad payload.
+        try:
+            envelope = store.get(req.customer_id)
+            if envelope is None:
+                raise HTTPException(
+                    status_code=404, detail=f"no online features for customer {req.customer_id!r}"
+                )
+            validate_envelope(envelope, as_of)
+        except FeatureContractError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        result = scorer.score(_static_attrs(req), envelope.features)
         return OnlineScoreResponse(
             customer_id=req.customer_id,
             churn_probability=result.churn_probability,

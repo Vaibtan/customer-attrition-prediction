@@ -9,6 +9,8 @@ level, through the real deployment path.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest.importorskip("confluent_kafka")
@@ -117,3 +119,24 @@ def test_online_score_equals_offline_batch_score(
         },
     )
     assert missing.status_code == 404
+
+    # ADR 0007 strict reader through the live store: a stale-schema envelope is refused (409),
+    # never silently imputed into a "parity" score.
+    stale = {
+        "schema": "deadbeef0000",
+        "as_of": T0.isoformat(),
+        "features": {col: 1.0 for col in OFF.FEATURE_COLUMNS},
+    }
+    store.backend.set("feat:STALE-SCHEMA", json.dumps(stale))
+    conflict = client.post(
+        "/score/online",
+        json={
+            "customer_id": "STALE-SCHEMA",
+            "region": "North",
+            "device_type": "Mobile",
+            "subscription_plan": "Free",
+            "account_age_days": 100.0,
+        },
+    )
+    assert conflict.status_code == 409
+    assert "schema mismatch" in conflict.json()["detail"]

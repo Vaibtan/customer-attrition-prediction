@@ -1,11 +1,13 @@
 """Quix Streams consumer -- Redpanda topic -> per-customer event-time state -> Redis online store.
 
 Deployment glue around the parity-proven online reference implementation
-(:mod:`churn.streaming.aggregate`). Quix owns transport + per-key stateful storage; the state
-payload is the deduped event map and :func:`churn.streaming.aggregate.feature_vector` is the
-reducer, so the DEPLOYED consumer and the offline DuckDB PIT query stay byte-identical -- the
-platform's train/serve-consistency guarantee, proven end-to-end in
-``tests/test_streaming_integration.py`` against a LIVE broker + store.
+(:mod:`churn.streaming.aggregate`). Quix owns transport + per-key stateful storage; the persisted
+per-key state is a :class:`churn.streaming.aggregate.CustomerAggregator` blob (the O(1)-per-event
+incremental fast path) plus per-event dedup markers -- first payload wins, the same tie-break as
+offline. The parity suite pins the aggregator byte-identical to the recompute reducer AND the
+offline DuckDB PIT query, so the DEPLOYED consumer inherits the train/serve-consistency
+guarantee, proven end-to-end in ``tests/test_streaming_integration.py`` against a LIVE broker +
+store. Each write is a versioned feature envelope stamped with ``schema`` + ``as_of`` (ADR 0007).
 
 Features are materialised AS OF a fixed query instant ``t0`` (``--as-of`` / ``CHURN_AS_OF``): each
 event with ``event_ts <= t0`` folds into the per-customer state and the current feature vector is
@@ -107,7 +109,7 @@ def run_consumer(
         )
         agg.add(int(event["event_ts_ns"]), str(event["event_type"]), event.get("value"))
         state.set("agg", json.dumps(agg.to_state()))
-        online_store.put(str(event["customer_id"]), agg.features())
+        online_store.put(str(event["customer_id"]), agg.features(), as_of=t0)
         return event
 
     sdf = sdf.apply(update_and_write, stateful=True)

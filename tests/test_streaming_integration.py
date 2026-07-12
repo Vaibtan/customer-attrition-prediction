@@ -69,7 +69,10 @@ def test_streaming_parity_end_to_end(
     offline = OFF.compute_pit_features(events, cohort).set_index("customer_id")
 
     for c in ids:
-        served = store.get(c)
-        assert served is not None, f"no online features for {c}"
+        envelope = store.get(c)
+        assert envelope is not None, f"no online features for {c}"
         for col in OFF.FEATURE_COLUMNS:
-            assert served[col] == pytest.approx(float(offline.loc[c, col]), abs=1e-9), (c, col)
+            assert envelope.features[col] == pytest.approx(float(offline.loc[c, col]), abs=1e-9), (
+                c,
+                col,
+            )

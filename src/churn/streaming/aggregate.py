@@ -18,6 +18,7 @@ implementation behind both the parity test and the deployed consumer.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 
@@ -57,10 +58,11 @@ def _as_float(value: object) -> float:
 class CustomerState:
     """Per-customer deduped, event-time event store (the online aggregation state).
 
-    Dedup is by ``event_id`` (idempotent): a redelivered duplicate overwrites with the same
-    payload, so late / duplicate delivery can never move a feature. The state round-trips through
-    ``as_dict``/``from_dict`` (event time as int64 nanoseconds) so the Quix consumer can persist
-    and recover it as keyed state.
+    Dedup is by ``event_id`` (idempotent, FIRST payload wins -- the same tie-break as offline's
+    ``drop_duplicates``): a redelivered duplicate is ignored, so late / duplicate / mutated
+    redelivery can never move a feature. The state round-trips through ``as_dict``/``from_dict``
+    (event time as int64 nanoseconds) so the Quix consumer can persist and recover it as keyed
+    state.
     """
 
     __slots__ = ("_events",)
@@ -69,6 +71,11 @@ class CustomerState:
         self._events: dict[str, EventRow] = dict(events) if events else {}
 
     def update(self, event_id: str, ts: object, event_type: str, value: object) -> None:
+        # First payload wins, matching offline's drop_duplicates(subset="event_id") and the
+        # consumer's seen-marker skip. A mutated redelivery (same id, different payload) must not
+        # move a feature in ONE of the three implementations only (REVIEW_ISSUES.md REV-05).
+        if event_id in self._events:
+            return
         self._events[event_id] = (pd.Timestamp(ts), event_type, _as_float(value))
 
     def features(self, t0: pd.Timestamp) -> dict[str, float]:
@@ -115,9 +122,12 @@ def compute_features(rows: list[EventRow], t0: pd.Timestamp) -> dict[str, float]
     login_28 = _win_count(login_ts, t0, _W["short_days"])
     login_90 = _win_count(login_ts, t0, _W["mid_days"])
     support_90 = _win_count(support_ts, t0, _W["mid_days"])
-    sd28 = [v for ts, v in logins if _in_window(ts, t0, _W["short_days"])]
-    sd90 = [v for ts, v in logins if _in_window(ts, t0, _W["mid_days"])]
-    sent90 = [v for ts, v in supports if _in_window(ts, t0, _W["mid_days"])]
+    # Means skip NaN (a null wire value) exactly like the offline AVG(e.value) skips SQL NULL,
+    # while the counts above include those rows exactly like COUNT(*) does (REV-04). Without the
+    # filter one null-valued login poisons the whole mean to NaN online but not offline.
+    sd28 = [v for ts, v in logins if _in_window(ts, t0, _W["short_days"]) and not math.isnan(v)]
+    sd90 = [v for ts, v in logins if _in_window(ts, t0, _W["mid_days"]) and not math.isnan(v)]
+    sent90 = [v for ts, v in supports if _in_window(ts, t0, _W["mid_days"]) and not math.isnan(v)]
 
     last_login = max(login_ts, default=None)
     recency = (
@@ -196,24 +206,31 @@ class CustomerAggregator:
         if ts_ns > t0:  # strict PIT: the label window is invisible
             return
         if event_type == "login":
+            # Counts mirror COUNT(*) (include null-valued rows); the mean accumulators mirror
+            # AVG(e.value) (skip NULL/NaN) -- the same split as compute_features (REV-04).
             val = _as_float(value)
+            has_val = not math.isnan(val)
             if ts_ns > t0 - _NEAR * _NS_PER_DAY:
                 self.login_14 += 1
             if ts_ns > t0 - _SHORT * _NS_PER_DAY:
                 self.login_28 += 1
-                self.sd28_sum += val
-                self.sd28_n += 1
+                if has_val:
+                    self.sd28_sum += val
+                    self.sd28_n += 1
             if ts_ns > t0 - _MID * _NS_PER_DAY:
                 self.login_90 += 1
-                self.sd90_sum += val
-                self.sd90_n += 1
+                if has_val:
+                    self.sd90_sum += val
+                    self.sd90_n += 1
             if self.last_login_ns is None or ts_ns > self.last_login_ns:
                 self.last_login_ns = ts_ns
         elif event_type == "support":
             if ts_ns > t0 - _MID * _NS_PER_DAY:
                 self.support_90 += 1
-                self.sent90_sum += _as_float(value)
-                self.sent90_n += 1
+                val = _as_float(value)
+                if not math.isnan(val):
+                    self.sent90_sum += val
+                    self.sent90_n += 1
         elif event_type == "order":
             if ts_ns > t0 - _MID * _NS_PER_DAY:
                 self.order_90 += 1

@@ -21,6 +21,7 @@ pytest.importorskip("quixstreams")
 import pandas as pd  # noqa: E402
 
 from churn.featurestore import offline as OFF  # noqa: E402
+from churn.featurestore import online as ON  # noqa: E402
 from churn.featurestore.cohort import make_cohort  # noqa: E402
 from churn.featurestore.online import OnlineStore  # noqa: E402
 from churn.simulator import generate as G  # noqa: E402
@@ -50,10 +51,14 @@ def _assert_store_matches_offline(
     store: OnlineStore, offline: pd.DataFrame, ids: list[str]
 ) -> None:
     for c in ids:
-        served = store.get(c)
-        assert served is not None, f"no online features for {c}"
+        envelope = store.get(c)
+        assert envelope is not None, f"no online features for {c}"
+        assert envelope.schema == ON.FEATURE_SCHEMA  # ADR 0007: every write is stamped
         for col in OFF.FEATURE_COLUMNS:
-            assert served[col] == pytest.approx(float(offline.loc[c, col]), abs=1e-9), (c, col)
+            assert envelope.features[col] == pytest.approx(float(offline.loc[c, col]), abs=1e-9), (
+                c,
+                col,
+            )
 
 
 def test_large_scale_parity_and_throughput(
