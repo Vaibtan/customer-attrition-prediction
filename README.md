@@ -67,11 +67,16 @@ equals the batch score for the same `(customer, t0)`.
 5. **Promotion with statistical teeth** — paired ΔROC-AUC *and* ΔPR-AUC lower bounds past an MDE +
    calibration/segment guardrails; incumbent wins ties; a better-by-noise challenger is not promoted.
 
-![Estimated vs true performance under drift](reports/figures/backtest_centerpiece.png)
+![Label-free monitoring buys back the label horizon](reports/figures/backtest_centerpiece.png)
 
-*The centerpiece backtest: as concept drift rotates the decision boundary, true ROC-AUC (labels)
-decays while CBPE stays optimistic — blind by construction — until a delayed-label monitor triggers a
-retrain that recovers performance.* Regenerate with `uv run python -m churn.backtest.plots`.
+*The centerpiece backtest, with an honest label horizon: labels for step t only arrive at t+3
+(stylized — the real 90-day churn label at weekly steps would be h≈13). Over the identical
+drifting world, a **label-free trigger** (covariate drift detector) starts recovery as soon as
+usable labeled data exists, while the **lagged-label trigger** must wait for the alarm to arrive
+with the labels — the gap between the two deployed-AUC lines is the horizon bought back. The
+companion chart (`backtest_blindspot.png`) shows the other side of the trade: under **pure
+concept drift** the marginals never move, label-free monitors (detector + CBPE) are structurally
+blind, and only the late labels catch it.* Regenerate with `uv run python -m churn.backtest.plots`.
 
 **Run it.**
 

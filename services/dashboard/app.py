@@ -20,15 +20,19 @@ st.set_page_config(page_title="Churn ML Mission Control", layout="wide")
 st.title("Churn ML Mission Control")
 st.caption("Synthetic-domain systems demo -- not a real-world performance claim.")
 
-timeline = MC.performance_timeline()
+# cache_data: the timeline runs 14 steps of 5-fold CV + CBPE bootstraps -- deterministic for a
+# fixed seed, so recomputing it on every widget interaction would block each rerun (REV-20).
+timeline = st.cache_data(MC.performance_timeline)()
 
 left, right = st.columns([2, 1])
 with left:
     st.subheader("Estimated vs true performance under drift")
     st.pyplot(plots.build_figure(timeline))
     st.caption(
-        "CBPE stays optimistic through concept drift (blind by design); the delayed-label monitor "
-        "triggers a retrain that recovers true performance."
+        "Labels for step t only arrive at t+h (stylized h=3): the monitor sees the dashed "
+        "'revealed' line, never the red truth. CBPE stays optimistic through concept drift "
+        "(blind by design); the lagged-label monitor retrains on the latest LABELED window "
+        "and recovers -- h steps after the decay actually happened."
     )
 with right:
     st.subheader("Risk tiers")
@@ -40,7 +44,7 @@ st.dataframe(MC.promotion_history(), use_container_width=True, hide_index=True)
 
 st.subheader("Drift & retrain events")
 st.dataframe(
-    timeline[["step", "true_auc", "cbpe_estimate", "covariate_drift", "retrained"]],
+    timeline[["step", "true_auc", "realized_auc", "cbpe_estimate", "covariate_drift", "retrained"]],
     use_container_width=True,
     hide_index=True,
 )
