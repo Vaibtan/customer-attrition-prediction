@@ -16,3 +16,9 @@ decision record `../../PHASE0_LOCK_DECISIONS.md` (D1–D8), and the frozen world
   guardrails; incumbent wins ties.
 - [0005 — Unified scoring-app scaffold](0005-unified-scoring-app-scaffold.md) — one `scoring_app`
   behind `/score` + `/score/online`; loader-with-`.run_id` contract, bespoke logic in `score_fn`.
+- [0006 — Lifecycle→serving cutover](0006-lifecycle-to-serving-cutover.md) — split truth (batch
+  pinned, online follows `@champion` via lazy TTL + serve-last-good), log-only shadow challenger,
+  `ok|degraded|stale` health contract.
+- [0007 — Online feature contract](0007-online-feature-contract.md) — `{schema, as_of, features}`
+  envelope with a spec-derived version; strict reader (409, never impute); freshness = `as_of`
+  equality.
