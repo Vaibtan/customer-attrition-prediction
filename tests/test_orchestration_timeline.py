@@ -59,9 +59,27 @@ def test_no_drift_skips_retrain():
     assert meta["retrained"].value is False
 
 
-def test_definitions_expose_backfill_job_and_schedule():
+def test_definitions_expose_backfill_job_and_retrain_schedule():
     assert D.timeline_backfill_job.name == "timeline_backfill"
     schedule_names = {s.name for s in D.defs.schedules}
-    assert "weekly_timeline" in schedule_names
+    assert "weekly_retrain" in schedule_names
     keys = {k.to_user_string() for k in D.defs.resolve_all_asset_keys()}
     assert {"pit_snapshot", "drift_gated_retrain", "timeline_events"} <= keys
+
+
+def test_weekly_retrain_schedule_tick_actually_launches(instance=None):
+    """REV-03: the old cron wrapped a PARTITIONED job in a bare ScheduleDefinition -- a tick
+    emits no partition_key and cannot launch. Evaluate a real tick, not just the name."""
+    from dagster import build_schedule_context  # noqa: PLC0415
+
+    result = D.weekly_retrain_schedule.evaluate_tick(build_schedule_context())
+    assert result.run_requests, "the schedule tick must yield a launchable run request"
+
+    # Structural guard: no schedule may ever target a partitioned selection with a bare
+    # ScheduleDefinition again (the tick above would pass while the LAUNCH fails).
+    job = D.weekly_retrain_job.resolve(
+        asset_graph=D.defs.resolve_asset_graph(),
+        default_executor_def=None,
+        resource_defs={},
+    )
+    assert job.partitions_def is None

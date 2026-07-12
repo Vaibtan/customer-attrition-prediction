@@ -2,9 +2,11 @@
 #
 # Full-stack platform. `profiles` gate each subsystem so a bare `docker compose up` stays minimal
 # and everything is opt-in (see ENHANCEMENT_PLAN.md, architecture section). Profiles: streaming
-# (Redpanda + producer + Quix consumer + Redis), serve (FastAPI /score), tracking (MLflow),
+# (Redpanda + producer + Quix consumer + Redis), serve (FastAPI batch /score + alias-following
+# /score/online), tracking (MLflow), orchestration (Dagster UI + weekly retrain schedule),
 # observability (Prometheus + Grafana), dashboard (Streamlit), test (real-infra integration
-# runner). The `dagster` service is still a placeholder image -- orchestration runs in-process.
+# runner). Pairings: serve+tracking+streaming = the full online demo; serve+observability = live
+# Grafana panels.
 name: churn-platform
 
 services:
@@ -160,10 +162,16 @@ services:
       - "8501:8501"
     profiles: ["dashboard"]
 
-  # --- Orchestration (Phase 5): Dagster. Placeholder image until built. ---
+  # --- Orchestration (Phase 5): the real Dagster code location (assets + jobs + the weekly
+  # drift-gated retrain schedule). UI on host port 3001 (Grafana owns 3000). ---
   dagster:
-    image: python:3.11-slim
-    command: ["python", "-c", "print('dagster orchestration -- Phase 5 placeholder')"]
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.dagster
+    ports:
+      - "3001:3000"
+    volumes:
+      - dagster-home:/opt/dagster
     profiles: ["orchestration"]
 
   # --- MLflow tracking + model registry (Phase 4): champion/challenger aliases ---
@@ -212,3 +220,4 @@ volumes:
   grafana-data:
   mlflow-data:
   consumer-state:
+  dagster-home:

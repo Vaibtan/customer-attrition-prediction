@@ -1,0 +1,22 @@
+# Dagster code location (REV-03: the real orchestration service, replacing the Phase-5
+# placeholder). Runs the UI + daemon over orchestration.definitions -- the slice assets, the
+# timeline backfill job (launched via backfill, never a cron), and the weekly drift-gated
+# retrain schedule.
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    DAGSTER_HOME=/opt/dagster
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --extra orchestration --no-dev && mkdir -p /opt/dagster
+
+COPY orchestration ./orchestration
+
+ENV PATH="/opt/venv/bin:${PATH}"
+EXPOSE 3000
+
+CMD ["dagster", "dev", "-m", "orchestration.definitions", "--host", "0.0.0.0", "--port", "3000"]
