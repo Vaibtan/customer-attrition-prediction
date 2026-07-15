@@ -65,8 +65,11 @@
 >   `save_run` writes one into every run dir automatically, `python -m churn.model_card`
 >   backfills existing runs. Defensive rendering (missing keys → n/a, never a KeyError).
 >
-> **GRILLED 2026-07-16 (decisions locked, build pending):** the remaining design tier went
-> through a grill session; every decision below is agreed:
+> **GRILLED 2026-07-16 (decisions locked) -> BUILT 2026-07-16:** the remaining design tier went
+> through a grill session; every decision below is agreed, and all four are now built + verified
+> (host suite green at 91.8% cov; a live Prometheus loaded all four rules `health=ok`; batch_scores
+> materialised in-container scoring 1600 from the baked pinned run; an adversarial multi-agent
+> review of the diff surfaced only 3 low/nit quality items, all fixed):
 > - **Item 6 (batch scoring):** `batch_scores` = unpartitioned asset DOWNSTREAM of
 >   `drift_gated_retrain` inside the existing `weekly_retrain` job — no second cron (the
 >   recurrence is justified by the retrain decision; CONTEXT.md "Weekly tick"). It scores the
@@ -87,9 +90,16 @@
 > - **Item 8 (authn) → ADR 0009:** no app-layer authn by design; the trust boundary is the
 >   ingress (gateway-terminated authn + rate limiting in production). No code change.
 >
-> **STILL OPEN:** the locked tier (REV-01/06/07/26/27 — rides the next re-lock) and the build
-> of the grilled items above (batch_scores asset, put_many set_many, alert rules + gauge +
-> runbook).
+> **Built (commits):** `put_many` set_many/MSET batching (`daa94b1`); `churn_model_state` gauge on
+> `ChampionResolver` transitions via an `on_state` seam that keeps `prometheus_client` out of
+> `churn.serving` (`1075bf1`); `batch_scores` weekly-tick asset scoring `latest_run_dir()` not
+> `@champion` (`d05f258`); Prometheus alert rules + `docs/RUNBOOK.md`, no Alertmanager (`1a1ed07`);
+> adversarial-review polish — honest independence test, corrected `_set_state` doc, runbook nit
+> (`e7e1e51`).
+>
+> **STILL OPEN:** only the locked tier (REV-01/06/07/26/27 — rides the next re-lock). The grilled
+> 2026-07-16 items are all built + verified (see "Built" above); nothing else in this review
+> remains.
 
 ---
 
