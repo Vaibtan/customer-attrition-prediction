@@ -94,6 +94,39 @@ def test_serve_last_good_goes_stale_then_recovers():
     assert resolver.health_status()["status"] == "ok"
 
 
+def test_on_state_emits_the_gauge_transitions_on_resolve_not_on_polls():
+    """The churn_model_state gauge is driven by on_state, fired inside resolve transitions (never
+    from health_status polling). ok|degraded|stale must each flip it, on CHANGE only (no churn
+    within a state), and the callback seam keeps prometheus_client out of churn.serving."""
+    clock = _Clock()
+    state = {"version": "1", "fail": True}
+    seen: list[str] = []
+
+    def version_fn() -> str:
+        if state["fail"]:
+            raise ConnectionError("tracking server down")
+        return state["version"]
+
+    resolver = ChampionResolver(
+        version_fn, lambda v: _model(v), ttl_seconds=60.0, clock=clock, on_state=seen.append
+    )
+
+    with pytest.raises(ModelUnavailable):  # never resolved -> degraded
+        _ = resolver.run_id
+    state["fail"] = False
+    assert resolver.run_id == "m@v1"  # recovers -> ok
+    assert resolver.run_id == "m@v1"  # within TTL: no re-resolve, so no state churn
+    resolver.health_status()  # a poll must NOT emit a transition
+    state["fail"] = True
+    clock.now = 61.0
+    assert resolver.run_id == "m@v1"  # serve-last-good -> stale
+    state["fail"] = False
+    state["version"] = "3"
+    clock.now = 122.0
+    assert resolver.run_id == "m@v3"  # recovers -> ok
+    assert seen == ["degraded", "ok", "stale", "ok"]
+
+
 class _Score:
     churn_probability = 0.42
 

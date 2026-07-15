@@ -55,6 +55,25 @@ def test_metrics_label_uses_route_template_not_raw_url():
     assert "wp-admin" not in body
 
 
+def test_model_state_gauge_is_one_hot():
+    """churn_model_state is a one-hot per (service): setting a state lights it 1 and clears the
+    others to 0 -- so the degraded/stale alert rule can't match a stale leftover series."""
+    from prometheus_client import generate_latest  # noqa: PLC0415
+
+    from api.metrics import set_model_state  # noqa: PLC0415
+
+    set_model_state("online-scoring", "stale")
+    body = generate_latest().decode()
+    assert 'churn_model_state{service="online-scoring",state="stale"} 1.0' in body
+    assert 'churn_model_state{service="online-scoring",state="ok"} 0.0' in body
+    assert 'churn_model_state{service="online-scoring",state="degraded"} 0.0' in body
+
+    set_model_state("online-scoring", "ok")  # a later transition flips the one-hot
+    body = generate_latest().decode()
+    assert 'churn_model_state{service="online-scoring",state="ok"} 1.0' in body
+    assert 'churn_model_state{service="online-scoring",state="stale"} 0.0' in body
+
+
 def test_metrics_count_uncaught_exceptions_as_500():
     """An exception that escapes the route must still increment the counter (5xx panel input)."""
     app = FastAPI()

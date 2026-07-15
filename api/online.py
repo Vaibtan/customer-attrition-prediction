@@ -26,6 +26,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
+from api.metrics import set_model_state
 from api.scoring_app import scoring_app
 from churn.featurestore.online import FeatureContractError, OnlineStore, validate_envelope
 from churn.instrument import model as M
@@ -33,6 +34,8 @@ from churn.serving.champion import CHALLENGER_ALIAS, CHAMPION_ALIAS, mlflow_alia
 from churn.serving.online_model import OnlineScorer, load_online_model
 from churn.serving.shadow import ShadowScorer
 from churn.settings import Settings
+
+_SERVICE = "online-scoring"
 
 # Module-level (registered once): shadow activity is observable, not a black box.
 _SHADOW_OUTCOMES = Counter(
@@ -89,6 +92,9 @@ def create_online_app(
             CHAMPION_ALIAS,
             settings.mlflow_tracking_uri,
             ttl_seconds=settings.champion_ttl_seconds,
+            # Only the champion drives the state gauge; the shadow/challenger resolver below
+            # leaves on_state unset (its outages are the shadow counter's job, not a serving state).
+            on_state=lambda state: set_model_state(_SERVICE, state),
         )
 
     if shadow is None and resolver is None and not run_dir:
@@ -150,7 +156,7 @@ def create_online_app(
         request_model=OnlineScoreRequest,
         response_model=OnlineScoreResponse,
         score_fn=_score_online,
-        metrics_label="online-scoring",
+        metrics_label=_SERVICE,
     )
 
 

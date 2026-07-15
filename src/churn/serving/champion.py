@@ -41,16 +41,30 @@ class ChampionResolver:
         load_fn: Callable[[str], OnlineModel],
         ttl_seconds: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
+        on_state: Callable[[str], None] | None = None,
     ) -> None:
         self._version_fn = version_fn
         self._load_fn = load_fn
         self.ttl = float(ttl_seconds)
         self._clock = clock
+        # on_state fires on each state TRANSITION (ok|degraded|stale) from inside a resolve -- the
+        # API layer wires it to a Prometheus gauge (churn_model_state). Same callback seam as the
+        # shadow on_outcome counter: prometheus_client never becomes a dependency of churn.serving.
+        self._on_state = on_state or (lambda state: None)
         self._lock = threading.Lock()
         self._version: str | None = None
         self._model: OnlineModel | None = None
         self._resolved_at: float = float("-inf")
         self._refresh_error: str | None = None
+        self._state: str | None = None
+
+    def _set_state(self, state: str) -> None:
+        """Emit a model-source state transition once per change. Called from resolve, NOT from
+        health_status -- the gauge must track what the resolver did, not how often /health is
+        polled. Firing only on change keeps the gauge from churning on every request."""
+        if state != self._state:
+            self._state = state
+            self._on_state(state)
 
     def _maybe_refresh(self) -> None:
         with self._lock:
@@ -64,11 +78,14 @@ class ChampionResolver:
                     self._version = version
                 self._resolved_at = now
                 self._refresh_error = None
+                self._set_state("ok")
             except Exception as exc:
                 self._refresh_error = f"{type(exc).__name__}: {exc}"
                 if self._model is None:
+                    self._set_state("degraded")
                     raise ModelUnavailable(f"champion unavailable: {self._refresh_error}") from exc
                 # serve-last-good: keep the loaded model, report stale via health_status.
+                self._set_state("stale")
 
     @property
     def run_id(self) -> str | None:
@@ -98,13 +115,19 @@ class ChampionResolver:
 
 
 def mlflow_alias_resolver(
-    name: str, alias: str, tracking_uri: str | None, ttl_seconds: float = 60.0
+    name: str,
+    alias: str,
+    tracking_uri: str | None,
+    ttl_seconds: float = 60.0,
+    on_state: Callable[[str], None] | None = None,
 ) -> ChampionResolver:
     """A resolver bound to ``models:/{name}@{alias}`` on an MLflow registry.
 
     ``tier_cutpoints`` ride on the model VERSION as a JSON tag (set by
     ``mlflow_registry.log_and_register``). An unset ``tracking_uri`` yields a resolver that is
-    permanently degraded (never a silent fallback to a local ./mlruns file store).
+    permanently degraded (never a silent fallback to a local ./mlruns file store). ``on_state``
+    (optional) receives ok|degraded|stale transitions -- the API wires the champion resolver's to
+    the churn_model_state gauge (the challenger/shadow resolver leaves it unset).
     """
 
     def version_fn() -> str:
@@ -135,4 +158,4 @@ def mlflow_alias_resolver(
             run_id=f"{name}@v{version}",
         )
 
-    return ChampionResolver(version_fn, load_fn, ttl_seconds=ttl_seconds)
+    return ChampionResolver(version_fn, load_fn, ttl_seconds=ttl_seconds, on_state=on_state)

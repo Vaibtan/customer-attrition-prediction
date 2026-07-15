@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 
 from fastapi import FastAPI, Request
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from starlette.responses import Response
 
 _REQUESTS = Counter(
@@ -27,6 +27,25 @@ _LATENCY = Histogram(
     "HTTP request latency (seconds).",
     ["service", "method", "path"],
 )
+# Serving model-source state as a one-hot gauge (ADR 0006's actual failure mode: the alias-
+# following online app going stale/degraded). Set from inside the ChampionResolver transitions
+# via its on_state callback -- NOT from /health polling. Only the online app has a resolver, but
+# the `service` label keeps this app-agnostic like the request metrics above.
+_MODEL_STATES = ("ok", "degraded", "stale")
+_MODEL_STATE = Gauge(
+    "churn_model_state",
+    "Serving model-source state, one-hot per service (1 = current state).",
+    ["service", "state"],
+)
+
+
+def set_model_state(service: str, state: str) -> None:
+    """Light ``state`` for ``service`` and clear the others -- so the degraded/stale alert can
+    never match a stale leftover series. ``state`` must be one of :data:`_MODEL_STATES`."""
+    if state not in _MODEL_STATES:
+        raise ValueError(f"unknown model state {state!r}; expected one of {_MODEL_STATES}")
+    for s in _MODEL_STATES:
+        _MODEL_STATE.labels(service, s).set(1.0 if s == state else 0.0)
 
 
 def add_metrics(app: FastAPI, service: str) -> FastAPI:
