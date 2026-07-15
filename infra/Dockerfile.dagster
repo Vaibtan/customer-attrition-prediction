@@ -1,27 +1,41 @@
 # Dagster code location (REV-03: the real orchestration service, replacing the Phase-5
 # placeholder). Runs the UI + daemon over orchestration.definitions -- the slice assets, the
 # timeline backfill job (launched via backfill, never a cron), and the weekly drift-gated
-# retrain schedule.
+# retrain schedule (now with batch_scores riding downstream -- the "weekly tick").
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
-    DAGSTER_HOME=/opt/dagster
+    DAGSTER_HOME=/opt/dagster \
+    PATH="/opt/venv/bin:${PATH}"
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-RUN uv sync --extra orchestration --no-dev && mkdir -p /opt/dagster
+# orchestration runs the DAGs; featurestore adds pyarrow (batch_scores writes a parquet) + duckdb
+# so the PIT/slice assets can actually materialise in-container, not just the retrain branch.
+RUN uv sync --extra orchestration --extra featurestore --no-dev && mkdir -p /opt/dagster
 
 COPY orchestration ./orchestration
+COPY data ./data
 
-# Non-root runtime (REV-16). DAGSTER_HOME is a named volume; image-side ownership is inherited
-# by the volume on first use.
-RUN useradd --system --uid 10001 --create-home appuser && chown appuser /opt/dagster
+# Bake a pinned batch model at build so the weekly tick's batch_scores can score the frozen book
+# from registry.latest_run_dir() out of the box -- self-contained, like the batch API image. The
+# scenario-driven retrain deliberately does NOT register a champion (ADR 0006), so a real run has
+# to be baked here for the tick to have something to score. (CI never builds this image -- the
+# `docker` job builds only the root image -- so this training step adds no CI time.)
+RUN python -m churn.train
+
+# Non-root runtime (REV-16). DAGSTER_HOME + the batch-scores parquet dir are the runtime write
+# surfaces (own them explicitly); the baked model + data are root-owned but world-readable and
+# only read at runtime.
+RUN useradd --system --uid 10001 --create-home appuser \
+    && chown appuser /opt/dagster \
+    && mkdir -p /app/reports/batch_scores \
+    && chown -R appuser /app/reports
 USER appuser
 
-ENV PATH="/opt/venv/bin:${PATH}"
 EXPOSE 3000
 
 CMD ["dagster", "dev", "-m", "orchestration.definitions", "--host", "0.0.0.0", "--port", "3000"]

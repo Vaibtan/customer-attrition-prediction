@@ -193,6 +193,9 @@ services:
     mem_limit: 1g
     volumes:
       - dagster-home:/opt/dagster
+      # Persist the weekly tick's batch_scores parquet across restarts. Image-side ownership
+      # (appuser owns /app/reports, REV-16) is inherited by the fresh named volume on first use.
+      - dagster-reports:/app/reports
     profiles: ["orchestration"]
 
   # --- MLflow tracking + model registry (Phase 4): champion/challenger aliases ---
@@ -245,3 +248,4 @@ volumes:
   mlflow-data:
   consumer-state:
   dagster-home:
+  dagster-reports:

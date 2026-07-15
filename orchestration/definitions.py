@@ -20,6 +20,7 @@ from orchestration.assets import (
     parity_report,
     synthetic_dataset,
 )
+from orchestration.scoring import BatchScoringConfig, batch_scores
 from orchestration.timeline import (
     RetrainScenario,
     drift_gated_retrain,
@@ -28,7 +29,7 @@ from orchestration.timeline import (
 )
 
 _slice_assets = [synthetic_dataset, offline_pit_features, online_features, parity_report]
-_timeline_assets = [timeline_events, pit_snapshot, drift_gated_retrain]
+_timeline_assets = [timeline_events, pit_snapshot, drift_gated_retrain, batch_scores]
 
 # The scoring timeline is a STATIC, historical partition set (a frozen world produces no new
 # data), so materialising it is what a backfill IS -- launched from the UI/CLI, never a cron. The
@@ -40,9 +41,11 @@ timeline_backfill_job = define_asset_job(
 )
 
 # The recurring decision belongs to the UNPARTITIONED retrain branch -- "weekly drift-gated
-# retrain" is the story the docs tell, and a bare ScheduleDefinition is correct here.
+# retrain" is the story the docs tell, and a bare ScheduleDefinition is correct here. batch_scores
+# rides this same tick DOWNSTREAM of the gate (CONTEXT.md "Weekly tick"): re-score the book after
+# the conditional retrain, no second cron -- the recurrence is justified by the retrain decision.
 weekly_retrain_job = define_asset_job(
-    "weekly_retrain", selection=AssetSelection.assets(drift_gated_retrain)
+    "weekly_retrain", selection=AssetSelection.assets(drift_gated_retrain, batch_scores)
 )
 
 weekly_retrain_schedule = ScheduleDefinition(
@@ -55,5 +58,9 @@ defs = Definitions(
     assets=_slice_assets + _timeline_assets,
     jobs=[timeline_backfill_job, weekly_retrain_job],
     schedules=[weekly_retrain_schedule],
-    resources={"slice_config": SliceConfig(), "retrain_scenario": RetrainScenario()},
+    resources={
+        "slice_config": SliceConfig(),
+        "retrain_scenario": RetrainScenario(),
+        "batch_scoring_config": BatchScoringConfig(),
+    },
 )
