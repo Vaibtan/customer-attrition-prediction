@@ -108,3 +108,55 @@ def test_put_many_and_missing_key():
     assert store.get("A").features["login_count_90d"] == 1.0
     assert store.get("B").features["login_count_90d"] == 2.0
     assert store.get("C") is None
+
+
+class _SpyBackend:
+    """Records call counts so put_many's ONE-round-trip contract is asserted, not assumed."""
+
+    def __init__(self) -> None:
+        self._d: dict[str, str] = {}
+        self.set_calls = 0
+        self.set_many_calls = 0
+
+    def set(self, key: str, value: str) -> None:
+        self.set_calls += 1
+        self._d[key] = value
+
+    def set_many(self, items: dict[str, str]) -> None:
+        self.set_many_calls += 1
+        self._d.update(items)
+
+    def get(self, key: str) -> str | None:
+        return self._d.get(key)
+
+
+def test_put_many_makes_one_backend_round_trip():
+    """ADR 0008: put_many batches transport -- one set_many/MSET, never N SETs."""
+    spy = _SpyBackend()
+    store = ON.OnlineStore(spy)
+    store.put_many(
+        {"A": _full_vector(1.0), "B": _full_vector(2.0), "C": _full_vector(3.0)}, as_of=T0
+    )
+    assert spy.set_many_calls == 1  # one round trip for the whole batch
+    assert spy.set_calls == 0  # not one SET per customer
+    assert store.get("B").features["login_count_90d"] == 2.0  # round-trips correctly
+
+
+def test_put_many_is_all_or_nothing_on_a_nan_vector():
+    """Envelopes are built BEFORE the backend call: one NaN aborts the whole MSET (no partial
+    write). allow_nan=False must fire at the producer for a batch just as for a single put."""
+    spy = _SpyBackend()
+    store = ON.OnlineStore(spy)
+    bad = _full_vector(1.0)
+    bad["mean_session_depth_28d"] = math.nan
+    with pytest.raises(ValueError):
+        store.put_many({"A": _full_vector(1.0), "B": bad}, as_of=T0)
+    assert spy.set_many_calls == 0  # nothing reached the backend
+    assert store.get("A") is None  # not even the good vector was written
+
+
+def test_put_many_empty_is_a_noop():
+    """An empty batch must not reach the backend (redis MSET rejects an empty mapping)."""
+    spy = _SpyBackend()
+    ON.OnlineStore(spy).put_many({}, as_of=T0)
+    assert spy.set_many_calls == 0 and spy.set_calls == 0

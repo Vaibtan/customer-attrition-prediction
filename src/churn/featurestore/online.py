@@ -75,6 +75,7 @@ def validate_envelope(envelope: FeatureEnvelope, expected_as_of: object) -> None
 
 class KVBackend(Protocol):
     def set(self, key: str, value: str) -> None: ...
+    def set_many(self, items: dict[str, str]) -> None: ...
     def get(self, key: str) -> str | None: ...
 
 
@@ -86,6 +87,9 @@ class DictBackend:
 
     def set(self, key: str, value: str) -> None:
         self._d[key] = value
+
+    def set_many(self, items: dict[str, str]) -> None:
+        self._d.update(items)
 
     def get(self, key: str) -> str | None:
         return self._d.get(key)
@@ -102,8 +106,19 @@ class RedisBackend:
     def set(self, key: str, value: str) -> None:
         self._r.set(key, value)
 
+    def set_many(self, items: dict[str, str]) -> None:
+        self._r.mset(items)  # one round trip for the whole batch (ADR 0008)
+
     def get(self, key: str) -> str | None:
         return self._r.get(key)
+
+
+def _envelope_json(features: dict[str, float], as_of: str) -> str:
+    """Serialize one feature envelope. allow_nan=False fails at the producer instead of persisting
+    a NaN feature -- bounds the REV-04 class of latent divergence for both single and batch writes.
+    """
+    payload = {"schema": FEATURE_SCHEMA, "as_of": as_of, "features": features}
+    return json.dumps(payload, sort_keys=True, allow_nan=False)
 
 
 class OnlineStore:
@@ -118,19 +133,22 @@ class OnlineStore:
         return cls(RedisBackend(url))
 
     def put(self, customer_id: str, features: dict[str, float], as_of: object) -> None:
-        payload = {
-            "schema": FEATURE_SCHEMA,
-            "as_of": _normalize_as_of(as_of),
-            "features": features,
-        }
-        # allow_nan=False: fail at the producer, never persist a NaN feature.
         self.backend.set(
-            _KEY.format(cid=customer_id), json.dumps(payload, sort_keys=True, allow_nan=False)
+            _KEY.format(cid=customer_id), _envelope_json(features, _normalize_as_of(as_of))
         )
 
     def put_many(self, vectors: dict[str, dict[str, float]], as_of: object) -> None:
-        for cid, feats in vectors.items():
-            self.put(cid, feats, as_of)
+        # Build ALL envelopes first, then one batched backend call (ADR 0008): the "rebuild the
+        # online store" path promised by the contract errors must not inherit an N-round-trip
+        # footgun. Encoding up front also makes the batch all-or-nothing -- a single NaN vector
+        # raises before anything reaches the store, never a partial write.
+        as_of = _normalize_as_of(as_of)
+        items = {
+            _KEY.format(cid=cid): _envelope_json(feats, as_of) for cid, feats in vectors.items()
+        }
+        if not items:  # redis MSET rejects an empty mapping; an empty batch is a no-op
+            return
+        self.backend.set_many(items)
 
     def get(self, customer_id: str) -> FeatureEnvelope | None:
         """Read one envelope; ``None`` on a missing key, contract error on a legacy/foreign blob."""
