@@ -22,3 +22,8 @@ decision record `../../PHASE0_LOCK_DECISIONS.md` (D1–D8), and the frozen world
 - [0007 — Online feature contract](0007-online-feature-contract.md) — `{schema, as_of, features}`
   envelope with a spec-derived version; strict reader (409, never impute); freshness = `as_of`
   equality.
+- [0008 — Online-store write amplification](0008-online-store-write-amplification.md) — `put_many`
+  batches transport (MSET); write-per-event and immortal dedup markers are deliberate (parity
+  ordering + the frozen world bounding state), not bugs.
+- [0009 — Trust boundary is the ingress](0009-trust-boundary-is-the-ingress.md) — no app-layer
+  authn by design; production wiring is gateway-terminated authn + rate limiting.

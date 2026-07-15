@@ -72,6 +72,19 @@ Materializing a static, historical partition set on demand. The scoring timeline
 a recurring cron over a finite past is theater; the weekly schedule belongs to the retrain branch.
 _Avoid_: scheduled run (that's the retrain branch)
 
+**Weekly tick**:
+The one legitimate recurrence in the frozen world: check drift, conditionally retrain + gate, then
+re-score the book. Recurring batch scores are justified by the retrain decision upstream — only a
+champion change can change them — never by pretending the frozen data moved.
+_Avoid_: scoring schedule, scoring cron
+
+### Security
+
+**Trust boundary**:
+The ingress. Authn terminates at a gateway in front of the platform; the app layer deliberately
+ships none and trusts the network behind it (ADR 0009).
+_Avoid_: API-key auth, app-layer auth
+
 ### Configuration
 
 **Runtime settings**:

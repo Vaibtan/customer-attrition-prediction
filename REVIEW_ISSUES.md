@@ -65,10 +65,31 @@
 >   `save_run` writes one into every run dir automatically, `python -m churn.model_card`
 >   backfills existing runs. Defensive rendering (missing keys → n/a, never a KeyError).
 >
-> **STILL OPEN:** the locked tier (REV-01/06/07/26/27 — rides the next re-lock), and
-> architecture items 4 (alert rules + runbook — grill first), 6 (batch scoring as a scheduled
-> asset — design decision, grill first), 8 (authn vs trust-boundary ADR — design decision,
-> grill first).
+> **GRILLED 2026-07-16 (decisions locked, build pending):** the remaining design tier went
+> through a grill session; every decision below is agreed:
+> - **Item 6 (batch scoring):** `batch_scores` = unpartitioned asset DOWNSTREAM of
+>   `drift_gated_retrain` inside the existing `weekly_retrain` job — no second cron (the
+>   recurrence is justified by the retrain decision; CONTEXT.md "Weekly tick"). It scores the
+>   real frozen book with `registry.latest_run_dir()` (batch-side pinned truth per ADR 0006,
+>   NEVER `@champion`), stamps `run_id`/`data_sha256`/score stats in materialization metadata,
+>   writes a parquet artifact, and its docstring states plainly that the upstream retrain
+>   branch is scenario-driven and does not move the registry champion.
+> - **ISS-14 (write amplification) → ADR 0008:** `put_many` batches transport via backend
+>   `set_many`/MSET (taken); the per-event-write debounce is REJECTED (flush-before-commit
+>   ordering risk = silent parity break; freshness worry was a red herring under as_of
+>   equality); dedup-marker TTL is REJECTED (frozen world bounds state; eviction before a
+>   redelivery double-folds permanently).
+> - **Item 4 (alerts):** Prometheus `rule_files` only — NO Alertmanager (a receiver-less
+>   Alertmanager is theater); rules: p99 latency, 5xx ratio, scrape-down, plus a new
+>   `churn_model_state{service,state}` Gauge set inside `ChampionResolver` transitions with a
+>   degraded/stale rule (the platform's actual failure mode, ADR 0006); `docs/RUNBOOK.md` with
+>   one entry per alert.
+> - **Item 8 (authn) → ADR 0009:** no app-layer authn by design; the trust boundary is the
+>   ingress (gateway-terminated authn + rate limiting in production). No code change.
+>
+> **STILL OPEN:** the locked tier (REV-01/06/07/26/27 — rides the next re-lock) and the build
+> of the grilled items above (batch_scores asset, put_many set_many, alert rules + gauge +
+> runbook).
 
 ---
 

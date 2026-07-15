@@ -36,8 +36,13 @@
 > suite green; ruff clean. Two backlog nuances corrected: ISS-07 docstrings also differed; ISS-08 is a
 > **2-way** dup (`timeline.py` ≡ `test_retrain.py`), not "×3" — `replay._window` left alone.
 >
-> **Remaining open (deferred by decision, not bugs):** ISS-12 (P4 cbpe O(n)), ISS-14 (P4 Redis
-> write amp — **grill the semantic tradeoffs first**); ISS-15..18 (P5 locked, need a re-lock).
+> **Remaining open (deferred by decision, not bugs):** ISS-12 (P4 cbpe O(n)); ISS-15..18 (P5
+> locked, need a re-lock).
+>
+> **Update — 2026-07-16: ISS-14 GRILLED → ADR 0008.** Sub-item (a) `put_many` pipelining is
+> taken (backend `set_many`/MSET, build pending); (b) the write debounce and (c) the dedup-marker
+> TTL are REJECTED as deliberate decisions — see the ADR for the parity-ordering and
+> frozen-world-bounds reasoning.
 >
 > **Update — 2026-07-12: ISS-11 RESOLVED** as part of the REVIEW_ISSUES.md build session (see
 > that file's §0): PSI bands centralized in `config.py` (PSI_WATCH/PSI_INVESTIGATE, referenced by
@@ -281,6 +286,7 @@ issue** (**ISS-01**), not a race.
 2. ~~**ISS-09 / ISS-10** (P1 parity-module, byte-identical, quick).~~ ✅ done (`73cfde1`).
 3. ~~**ISS-02 … ISS-08** (P2 strategic dedup).~~ ✅ done (`77d8a85`, `2d38543`, `67b61c1`, `b747869`,
    `b4af59e`, `9878285`) + ADR 0005; 7-passed on live infra.
-4. **ISS-11 … ISS-14** (P3/P4 config + efficiency). ← next. NB ISS-14 debounce/TTL change semantics
-   (grill first).
+4. ~~**ISS-11 … ISS-14** (P3/P4 config + efficiency).~~ ISS-11 ✅ done (REVIEW_ISSUES.md §0);
+   ISS-14 grilled 2026-07-16 → **ADR 0008** (debounce + dedup-TTL rejected as deliberate;
+   `put_many` `set_many`/MSET is the one build item). ISS-12 stays deferred by decision.
 5. **ISS-15 … ISS-18** — only if/when a re-lock is decided (they ride along on that commit).
