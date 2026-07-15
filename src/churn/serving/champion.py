@@ -59,9 +59,10 @@ class ChampionResolver:
         self._state: str | None = None
 
     def _set_state(self, state: str) -> None:
-        """Emit a model-source state transition once per change. Called from resolve, NOT from
-        health_status -- the gauge must track what the resolver did, not how often /health is
-        polled. Firing only on change keeps the gauge from churning on every request."""
+        """Emit a model-source state transition to on_state, but only on an ACTUAL change. Any
+        _maybe_refresh caller (score OR health_status) can reach here, but only when a resolve
+        actually runs: within-TTL calls early-return first, so /health poll frequency never churns
+        the gauge -- it tracks what the resolver did, not how often it was polled."""
         if state != self._state:
             self._state = state
             self._on_state(state)

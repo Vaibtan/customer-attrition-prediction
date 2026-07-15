@@ -62,23 +62,29 @@ def test_batch_scores_stamps_provenance_and_writes_a_parquet(tmp_path, raw_full)
     assert set(written["risk_tier"]) <= {"low", "medium", "high"}
 
 
-def test_weekly_tick_runs_retrain_then_batch_scores(tmp_path, raw_full):
+def test_weekly_tick_retrain_registers_nothing_batch_scores_stays_pinned(tmp_path, raw_full):
     """batch_scores is DOWNSTREAM of drift_gated_retrain: selecting both materialises the retrain
-    branch then the score. The score is pinned to latest_run_dir() -- independent of the
-    scenario-driven retrain, which does NOT move the registry champion (the locked honesty note)."""
-    run_dir = _pin_a_batch_model(tmp_path / "models", raw_full)
+    branch then the score. inject_drift=True so retrain+gate ACTUALLY runs -- and the ADR 0006
+    honesty note is what makes this a real test: the retrain registers NO run into the registry, so
+    latest_run_dir() (hence the score) cannot be silently moved by the tick."""
+    models_dir = tmp_path / "models"
+    run_dir = _pin_a_batch_model(models_dir, raw_full)
+    runs_before = sorted(p.name for p in models_dir.glob("*"))
     result = materialize(
         [T.drift_gated_retrain, S.batch_scores],
         resources={
-            "retrain_scenario": T.RetrainScenario(inject_drift=False, n=800),
+            "retrain_scenario": T.RetrainScenario(inject_drift=True, n=1500),
             "batch_scoring_config": S.BatchScoringConfig(
-                models_dir=str(tmp_path / "models"), reports_dir=str(tmp_path / "reports")
+                models_dir=str(models_dir), reports_dir=str(tmp_path / "reports")
             ),
         },
     )
     assert result.success
     meta = result.asset_materializations_for_node("batch_scores")[0].metadata
-    assert meta["run_id"].value == run_dir.name  # scored the pinned model, not a retrain output
+    assert meta["run_id"].value == run_dir.name  # scored the human-pinned model...
+    # ...and the drift-gated retrain added NO run to the registry: the tick cannot move what batch
+    # scores. Without this, "independent of the retrain" would hold trivially (nothing to move to).
+    assert sorted(p.name for p in models_dir.glob("*")) == runs_before
 
 
 def test_no_scoring_cron_batch_rides_the_weekly_tick():

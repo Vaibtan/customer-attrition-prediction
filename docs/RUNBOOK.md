@@ -10,7 +10,7 @@ decision, `REVIEW_ISSUES.md` GRILLED 2026-07-16). Alerts terminate at:
 
 - the **Prometheus `/alerts` UI** — <http://localhost:9090/alerts> (state: inactive / pending / firing),
   and `/api/v1/rules` for the loaded rule set;
-- the Grafana **"Model source state"** panel on the *Churn Scoring API — Ops* dashboard
+- the Grafana **"Model source state"** panel on the *Churn Scoring API - Ops* dashboard
   (<http://localhost:3000>, `observability` profile).
 
 Bring the relevant stack up with (a local `.env` with `GRAFANA_ADMIN_PASSWORD` is required — see
