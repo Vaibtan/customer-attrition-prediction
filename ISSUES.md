@@ -39,10 +39,10 @@
 > **Remaining open (deferred by decision, not bugs):** ISS-12 (P4 cbpe O(n)); ISS-15..18 (P5
 > locked, need a re-lock).
 >
-> **Update — 2026-07-16: ISS-14 GRILLED → ADR 0008.** Sub-item (a) `put_many` pipelining is
-> taken (backend `set_many`/MSET, build pending); (b) the write debounce and (c) the dedup-marker
-> TTL are REJECTED as deliberate decisions — see the ADR for the parity-ordering and
-> frozen-world-bounds reasoning.
+> **Update — 2026-07-16: ISS-14 RESOLVED (grilled → ADR 0008, then built).** Sub-item (a)
+> `put_many` pipelining is **BUILT** (`daa94b1`: backend `set_many`/MSET, all-or-nothing batch,
+> empty no-op); (b) the write debounce and (c) the dedup-marker TTL are REJECTED as deliberate
+> decisions — see the ADR for the parity-ordering and frozen-world-bounds reasoning.
 >
 > **Update — 2026-07-12: ISS-11 RESOLVED** as part of the REVIEW_ISSUES.md build session (see
 > that file's §0): PSI bands centralized in `config.py` (PSI_WATCH/PSI_INVESTIGATE, referenced by
@@ -231,18 +231,25 @@ issue** (**ISS-01**), not a race.
   position weights (`w = np.bincount(idx)[order]`) and evaluate a weighted soft-AUC in O(n). (Coordinate
   with **ISS-02**.)
 
-### ISS-13 — Promotion runs two independent paired bootstraps
+### ISS-13 — Promotion runs two independent paired bootstraps ✅ RESOLVED (`b4af59e`, with ISS-02)
 - **File:** `src/churn/lifecycle/promotion.py:104` — `bootstrap_auc_diff_ci` then
   `bootstrap_pr_auc_diff_ci` regenerate the **same** `(n_rounds × n)` draws matrix. **Fix:** one
   combined `evaluate.bootstrap_diff_ci` that generates draws once and computes both ROC + PR diffs in a
   single pass. (Natural companion to **ISS-02**.)
+- **Done:** `evaluate.bootstrap_diff_ci` scores both metrics on one shared `_bootstrap_metrics`
+  matrix; the gate calls it at `promotion.py:103`; `test_metrics.py::test_bootstrap_diff_ci_matches_separate_calls`
+  pins byte-equality with the two separate calls at the same seed (so the halving stays exact).
 
-### ISS-14 — Redis write amplification
+### ISS-14 — Redis write amplification ✅ RESOLVED (grilled → ADR 0008; built `daa94b1`)
 - **Files:** `src/churn/featurestore/online.py:59` (`put_many` loops `put` → N round-trips; add
   `set_many` via redis-py pipeline/MSET); `services/consumer/app.py:102` (a Redis SET per event when
   only the final vector is read — debounce, **changes freshness semantics**); `services/consumer/app.py:93`
   (per-event dedup markers `s:{eid}` never expire → **unbounded state growth**; bound with TTL/LRU sized
   to the redelivery window — load-bearing for idempotency, so a correctness-vs-memory tradeoff).
+- **Done:** (a) `put_many` batches transport via `KVBackend.set_many`/MSET, building all envelopes
+  first (all-or-nothing on a NaN vector, empty no-op) with unchanged envelope semantics. (b) debounce
+  and (c) dedup-TTL are **REJECTED by design** in **ADR 0008** (flush-before-commit ordering = silent
+  parity break; the frozen world bounds marker state, so eviction can only double-fold a redelivery).
 
 ---
 
@@ -287,6 +294,7 @@ issue** (**ISS-01**), not a race.
 3. ~~**ISS-02 … ISS-08** (P2 strategic dedup).~~ ✅ done (`77d8a85`, `2d38543`, `67b61c1`, `b747869`,
    `b4af59e`, `9878285`) + ADR 0005; 7-passed on live infra.
 4. ~~**ISS-11 … ISS-14** (P3/P4 config + efficiency).~~ ISS-11 ✅ done (REVIEW_ISSUES.md §0);
-   ISS-14 grilled 2026-07-16 → **ADR 0008** (debounce + dedup-TTL rejected as deliberate;
-   `put_many` `set_many`/MSET is the one build item). ISS-12 stays deferred by decision.
+   ISS-13 ✅ done (`b4af59e`, with ISS-02); ISS-14 grilled 2026-07-16 → **ADR 0008**, `put_many`
+   `set_many`/MSET built (`daa94b1`), debounce + dedup-TTL rejected as deliberate. ISS-12 stays
+   deferred by decision — the only editable item left, and optional.
 5. **ISS-15 … ISS-18** — only if/when a re-lock is decided (they ride along on that commit).
