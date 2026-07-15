@@ -91,14 +91,14 @@ docker compose --profile test run --rm test-runner        # pytest -m integratio
 docker compose --profile streaming up -d      # Redpanda + producer + Quix consumer + Redis
 docker compose --profile serve up -d          # FastAPI /score (+ /metrics)
 docker compose --profile tracking up -d       # MLflow tracking + registry (champion/challenger)
-docker compose --profile observability up -d  # Prometheus + Grafana (ops dashboards)
+docker compose --profile observability up -d  # Prometheus + Grafana (ops dashboards + SLO alerts)
 docker compose --profile dashboard up -d      # Streamlit ML mission-control  (:8501)
 ```
 
 **Where to read more:** `ENHANCEMENT_PLAN.md` (design + architecture), `IMPLEMENTATION_CHECKLIST.md`
 (phase-ordered *what*), `PHASE0_LOCK_DECISIONS.md` (decision record D1–D8), `docs/adr/` (governance +
-platform ADRs). The pipeline stays leak-free by argument from the **sentinel suite**, never claimed
-as proven on real data.
+platform ADRs), `docs/RUNBOOK.md` (what to do when an alert fires). The pipeline stays leak-free by
+argument from the **sentinel suite**, never claimed as proven on real data.
 
 ---
 

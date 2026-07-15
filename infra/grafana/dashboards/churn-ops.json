@@ -42,12 +42,27 @@
       "title": "Error rate (5xx req/s)",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(rate(churn_http_requests_total{status=~\"5..\"}[5m])) by (service)",
           "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Model source state (1 = current)",
+      "description": "ADR 0006 serving state: ok | stale | degraded. Drives the ModelStateDegradedOrStale alert; set inside the ChampionResolver transitions.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "churn_model_state",
+          "legendFormat": "{{service}} {{state}}"
         }
       ]
     }

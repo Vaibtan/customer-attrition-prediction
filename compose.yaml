@@ -144,6 +144,7 @@ services:
     image: prom/prometheus:v2.54.1
     volumes:
       - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro  # SLO/liveness rules (Phase 6)
     ports:
       - "9090:9090"
     restart: unless-stopped

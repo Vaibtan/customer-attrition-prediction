@@ -1,0 +1,69 @@
+# Prometheus alerting rules for the churn scoring platform (Phase 6).
+#
+# These are the SLO/liveness alerts that turn the ops graphs into "someone should look". There is
+# deliberately NO Alertmanager (a locked decision, REVIEW_ISSUES.md GRILLED 2026-07-16): a
+# receiver-less Alertmanager is theatre. Alerts terminate at the Prometheus /alerts UI (and the
+# Grafana "Model source state" panel); production would add Alertmanager -> pager here. Every alert
+# points at docs/RUNBOOK.md via a `runbook` annotation. Thresholds are hardcoded with the reasoning
+# inline -- there is one book, so the number and its justification live together.
+groups:
+  - name: churn-serving-slos
+    rules:
+      - alert: HighP99Latency
+        # p99 request latency per service over 5m. A single sklearn predict (batch) or a Redis read
+        # + predict (online) is milliseconds; a sustained p99 above 500ms means the scorer or its
+        # dependencies (Redis, the registry/tracking resolve) are struggling.
+        expr: histogram_quantile(0.99, sum by (le, service) (rate(churn_http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99 latency > 500ms on {{ $labels.service }}"
+          description: "5m p99 request latency is {{ $value | humanizeDuration }} (threshold 500ms)."
+          runbook: "docs/RUNBOOK.md#highp99latency"
+
+      - alert: High5xxRatio
+        # Fraction of requests returning 5xx per service over 5m. REV-12 made 5xx counting truthful
+        # (uncaught exceptions now increment the counter before re-raising), so this ratio is real
+        # and not blind to exactly the failures it exists for.
+        expr: |
+          sum by (service) (rate(churn_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum by (service) (rate(churn_http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx ratio > 5% on {{ $labels.service }}"
+          description: "{{ $value | humanizePercentage }} of requests are 5xx over 5m (threshold 5%)."
+          runbook: "docs/RUNBOOK.md#high5xxratio"
+
+  - name: churn-platform-liveness
+    rules:
+      - alert: ScrapeTargetDown
+        # A scoring API target has been unreachable by Prometheus for 2m (process down, crashed, or
+        # never came up). up==0 is per configured scrape target; job=~"churn-api.*" covers the batch
+        # (churn-api) and online (churn-api-online) scoring services, not Prometheus itself.
+        expr: up{job=~"churn-api.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus cannot scrape {{ $labels.job }} ({{ $labels.instance }})"
+          description: "The scoring target has been down for >2m."
+          runbook: "docs/RUNBOOK.md#scrapetargetdown"
+
+      - alert: ModelStateDegradedOrStale
+        # ADR 0006's ACTUAL failure mode: the alias-following online app cannot resolve the champion.
+        # degraded = no model has ever loaded (scoring 503s); stale = serving the last-good model
+        # while re-resolution keeps failing. churn_model_state is one-hot per service, set inside the
+        # ChampionResolver state transitions (not on /health polls).
+        expr: churn_model_state{state=~"degraded|stale"} == 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} model state is {{ $labels.state }}"
+          description: "The serving model source has been {{ $labels.state }} for >3m (ADR 0006)."
+          runbook: "docs/RUNBOOK.md#modelstatedegradedorstale"
